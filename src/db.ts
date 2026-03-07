@@ -9,7 +9,13 @@ if (!process.env.DATABASE_URL) {
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgres://user:pass@localhost:5432/db',
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: { 
+    rejectUnauthorized: false,
+    require: true
+  },
+  connectionTimeoutMillis: 5000,
+  idleTimeoutMillis: 30000,
+  max: 10
 });
 
 export const query = async (text: string, params?: any[]) => {
