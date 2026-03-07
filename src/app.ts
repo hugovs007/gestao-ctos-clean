@@ -1,5 +1,5 @@
 import express from "express";
-import pool, { initializeDb } from "./db";
+import pool from "./db.js";
 
 const app = express();
 
