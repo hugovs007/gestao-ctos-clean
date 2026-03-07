@@ -1,15 +1,14 @@
 {
-  "version": 2,
-  "builds": [
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
     {
-      "src": "dist-server/server.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
+      "source": "/api/(.*)",
+      "destination": "/api/index.ts"
+    },
     {
-      "src": "/api/(.*)",
-      "dest": "dist-server/server.js"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
