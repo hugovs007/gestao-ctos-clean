@@ -11,7 +11,6 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_LjwZoJaC82rk@ep-red-tooth-ac00bo2q.sa-east-1.aws.neon.tech/neondb?sslmode=require',
   ssl: { 
     rejectUnauthorized: false,
-    require: true
   },
   connectionTimeoutMillis: 5000,
   idleTimeoutMillis: 30000,

@@ -1,14 +1,24 @@
 import express from "express";
-import pool, { initializeDb } from "./src/db";
+import path from "path";
+import { fileURLToPath } from 'url';
+import pool, { initializeDb } from "./src/db.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = parseInt(process.env.PORT || "3000", 10);
 
   app.use(express.json());
 
   // Initialize DB
-  initializeDb().catch(console.error);
+  try {
+    await initializeDb();
+    console.log('✅ Banco de dados inicializado');
+  } catch (error) {
+    console.error('❌ Erro ao inicializar banco:', error);
+  }
 
   // API Routes
 
@@ -140,14 +150,18 @@ async function startServer() {
       const query = req.query.q as string;
       if (!query || query.length < 2) return res.json([]);
 
+      const searchTerm = `%${query}%`;
       const result = await pool.query(`
         SELECT c.*, cto.name as cto_name, city.name as city_name 
         FROM clients c
         JOIN ctos cto ON c.cto_id = cto.id
         JOIN cities city ON c.city_id = city.id
-        WHERE c.name ILIKE $1 OR c.address ILIKE $2 OR c.pppoe ILIKE $3 OR cto.name ILIKE $4
+        WHERE c.name ILIKE $1 
+           OR c.address ILIKE $1 
+           OR c.pppoe ILIKE $1 
+           OR cto.name ILIKE $1
         LIMIT 50
-      `, [`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`]);
+      `, [searchTerm, searchTerm, searchTerm, searchTerm]);
       
       res.json(result.rows);
     } catch (error: any) {
@@ -156,24 +170,27 @@ async function startServer() {
     }
   });
 
-  // Vite middleware for development (only if not in production/Vercel)
-  if (process.env.NODE_ENV !== "production") {
+  // Serve static files in production
+  if (process.env.NODE_ENV === 'production') {
+    app.use(express.static(path.join(__dirname, 'dist')));
+    
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+    });
+  } else {
+    // Vite middleware for development
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
-  } else {
-    // In production, we would serve static files here
-    // But for this environment, we rely on the dev setup mostly
-    // or standard static serving if built
-    app.use(express.static('dist'));
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
   });
 }
 
-startServer();
+// Iniciar servidor
+startServer().catch(console.error);

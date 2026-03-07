@@ -1,47 +1,31 @@
 import { Pool } from 'pg';
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) {
-    console.error('❌ DATABASE_URL não definida!');
-    process.exit(1);
+import dotenv from 'dotenv';
+dotenv.config();
+if (!process.env.DATABASE_URL) {
+    console.error("ERRO CRÍTICO: A variável de ambiente DATABASE_URL não está definida.");
 }
-console.log('📌 String original:', databaseUrl);
-// Extrair componentes da URL de conexão
-const url = new URL(databaseUrl);
-const password = decodeURIComponent(url.password);
-console.log('📊 Componentes extraídos:', {
-    user: url.username,
-    password: password ? '***' + password.slice(-3) : 'ausente',
-    host: url.hostname,
-    port: url.port || '5432',
-    database: url.pathname.slice(1)
-});
-// FORÇAR SSL para produção e desenvolvimento
 const pool = new Pool({
-    user: url.username,
-    password: password,
-    host: url.hostname,
-    port: parseInt(url.port || '5432', 10),
-    database: url.pathname.slice(1),
+    connectionString: process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_LjwZoJaC82rk@ep-red-tooth-ac00bo2q.sa-east-1.aws.neon.tech/neondb?sslmode=require',
     ssl: {
-        rejectUnauthorized: false // FORÇA SSL mesmo em desenvolvimento
-    }
+        rejectUnauthorized: false,
+    },
+    connectionTimeoutMillis: 5000,
+    idleTimeoutMillis: 30000,
+    max: 10
 });
-// Teste de conexão
-pool.connect((err, client, release) => {
-    if (err) {
-        console.error('❌ Erro ao conectar ao banco:', err.message);
-        console.error('Detalhes do erro:', err);
+export const query = async (text, params) => {
+    if (!process.env.DATABASE_URL) {
+        return { rows: [], rowCount: 0 };
     }
-    else {
-        console.log('✅ Conectado ao PostgreSQL com sucesso!');
-        release();
+    return pool.query(text, params);
+};
+export const initializeDb = async () => {
+    if (!process.env.DATABASE_URL) {
+        return;
     }
-});
-// Initialize tables
-async function initializeDatabase() {
+    const client = await pool.connect();
     try {
-        console.log('🔄 Criando tabelas...');
-        await pool.query(`
+        await client.query(`
       CREATE TABLE IF NOT EXISTS cities (
         id SERIAL PRIMARY KEY,
         name TEXT NOT NULL UNIQUE
@@ -63,16 +47,26 @@ async function initializeDatabase() {
         city_id INTEGER NOT NULL REFERENCES cities(id),
         cto_id INTEGER NOT NULL REFERENCES ctos(id) ON DELETE CASCADE,
         port_number INTEGER NOT NULL,
-        status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
+        status TEXT CHECK(status IN ('active', 'inactive')) DEFAULT 'active',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(cto_id, port_number)
       );
     `);
-        console.log('✅ Database initialized successfully');
+        // Check if pppoe column exists (migration logic)
+        const res = await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='clients' AND column_name='pppoe';
+    `);
+        if (res.rowCount === 0) {
+            await client.query("ALTER TABLE clients ADD COLUMN pppoe TEXT");
+        }
     }
-    catch (error) {
-        console.error('❌ Error initializing database:', error);
+    catch (err) {
+        console.error('Error initializing database', err);
     }
-}
-initializeDatabase();
+    finally {
+        client.release();
+    }
+};
 export default pool;
