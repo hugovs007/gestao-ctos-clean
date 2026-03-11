@@ -97,6 +97,19 @@ app.post("/api/cities", async (req, res) => {
   }
 });
 
+app.put("/api/cities/:id", async (req, res) => {
+  const { name, unit_id } = req.body;
+  try {
+    await pool.query(
+      "UPDATE cities SET name = $1, unit_id = $2 WHERE id = $3",
+      [name, unit_id === "" ? null : unit_id, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 // CTOs
 app.get("/api/cities/:cityId/ctos", async (req, res) => {
   try {

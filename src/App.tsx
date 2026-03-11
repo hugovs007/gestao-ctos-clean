@@ -118,6 +118,10 @@ function Dashboard() {
   const [showUnitModal, setShowUnitModal] = useState(false);
   const [newUnitName, setNewUnitName] = useState('');
 
+  // City Editing
+  const [editingCity, setEditingCity] = useState<City | null>(null);
+  const [editCityForm, setEditCityForm] = useState({ name: '', unit_id: '' });
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -210,6 +214,34 @@ function Dashboard() {
     }
   };
 
+  const handleOpenEditCity = (e: React.MouseEvent, city: City) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditingCity(city);
+    setEditCityForm({ name: city.name, unit_id: city.unit_id?.toString() || '' });
+  };
+
+  const handleSaveCityEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCity) return;
+    try {
+      const res = await fetch(`/api/cities/${editingCity.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editCityForm.name,
+          unit_id: editCityForm.unit_id ? Number(editCityForm.unit_id) : null
+        }),
+      });
+      if (res.ok) {
+        setEditingCity(null);
+        fetchCities();
+      }
+    } catch (error) {
+      console.error('Failed to update city', error);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -299,7 +331,15 @@ function Dashboard() {
                                     <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600">
                                       <MapPin className="w-6 h-6" />
                                     </div>
-                                    <ArrowLeft className="w-5 h-5 text-slate-300 rotate-180" />
+                                    <div className="flex items-center gap-1">
+                                      <button 
+                                        onClick={(e) => handleOpenEditCity(e, city)}
+                                        className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors"
+                                      >
+                                        <Edit2 className="w-4 h-4" />
+                                      </button>
+                                      <ArrowLeft className="w-5 h-5 text-slate-300 rotate-180" />
+                                    </div>
                                   </div>
                                   <h3 className="text-lg font-semibold text-slate-900">{city.name}</h3>
                                   <p className="text-sm text-slate-500 mt-1">Clique para ver CTOs</p>
@@ -327,7 +367,15 @@ function Dashboard() {
                                   <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-600">
                                     <MapPin className="w-6 h-6" />
                                   </div>
-                                  <ArrowLeft className="w-5 h-5 text-slate-300 rotate-180" />
+                                  <div className="flex items-center gap-1">
+                                    <button 
+                                      onClick={(e) => handleOpenEditCity(e, city)}
+                                      className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors"
+                                    >
+                                      <Edit2 className="w-4 h-4" />
+                                    </button>
+                                    <ArrowLeft className="w-5 h-5 text-slate-300 rotate-180" />
+                                  </div>
                                 </div>
                                 <h3 className="text-lg font-semibold text-slate-900">{city.name}</h3>
                                 <p className="text-sm text-slate-500 mt-1">Clique para ver CTOs</p>
@@ -349,7 +397,15 @@ function Dashboard() {
                             <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600">
                               <MapPin className="w-6 h-6" />
                             </div>
-                            <ArrowLeft className="w-5 h-5 text-slate-300 rotate-180" />
+                            <div className="flex items-center gap-1">
+                              <button 
+                                onClick={(e) => handleOpenEditCity(e, city)}
+                                className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <ArrowLeft className="w-5 h-5 text-slate-300 rotate-180" />
+                            </div>
                           </div>
                           <h3 className="text-lg font-semibold text-slate-900">{city.name}</h3>
                           <p className="text-sm text-slate-500 mt-1">Clique para ver CTOs</p>
@@ -414,6 +470,49 @@ function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* City Edit Modal */}
+      {editingCity && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <Card className="max-w-md w-full p-6 shadow-xl">
+            <div className="flex justify-between items-start mb-6">
+              <h2 className="text-xl font-bold">Editar Cidade</h2>
+              <button onClick={() => setEditingCity(null)} className="text-slate-400 hover:text-slate-600">
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveCityEdit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nome da Cidade</label>
+                <input
+                  required
+                  type="text"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={editCityForm.name}
+                  onChange={(e) => setEditCityForm({ ...editCityForm, name: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Unidade</label>
+                <select
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={editCityForm.unit_id}
+                  onChange={(e) => setEditCityForm({ ...editCityForm, unit_id: e.target.value })}
+                >
+                  <option value="">Sem Unidade</option>
+                  {units.map(unit => (
+                    <option key={unit.id} value={unit.id}>{unit.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <Button type="button" variant="secondary" onClick={() => setEditingCity(null)}>Cancelar</Button>
+                <Button type="submit">Salvar Alterações</Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
@@ -432,6 +531,11 @@ function CityView() {
   const [newCTOAddress, setNewCTOAddress] = useState('');
   const [newCTOPorts, setNewCTOPorts] = useState(16);
 
+  // City Editing
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [isEditingCity, setIsEditingCity] = useState(false);
+  const [editCityForm, setEditCityForm] = useState({ name: '', unit_id: '' });
+
   // Edição de CTO
   const [editingCTO, setEditingCTO] = useState<CTO | null>(null);
   const [editForm, setEditForm] = useState({ name: '', address: '', total_ports: 16 });
@@ -444,16 +548,22 @@ function CityView() {
           fetch('/api/cities'),
           fetch('/api/units')
         ]);
-        const cities = await citiesReq.json();
-        const units = await unitsReq.json();
+        const citiesData = await citiesReq.json();
+        const unitsData = await unitsReq.json();
         
-        if (Array.isArray(cities)) {
-          const city = cities.find((c: City) => c.id === Number(id));
+        if (Array.isArray(unitsData)) setUnits(unitsData);
+
+        if (Array.isArray(citiesData)) {
+          const city = citiesData.find((c: City) => c.id === Number(id));
           if (city) {
             setCityName(city.name);
-            if (city.unit_id && Array.isArray(units)) {
-              const unit = units.find((u: Unit) => u.id === city.unit_id);
+            setEditCityForm({ name: city.name, unit_id: city.unit_id?.toString() || '' });
+            if (city.unit_id && Array.isArray(unitsData)) {
+              const unit = unitsData.find((u: Unit) => u.id === city.unit_id);
               if (unit) setUnitName(unit.name);
+              else setUnitName(null);
+            } else {
+              setUnitName(null);
             }
           }
         }
@@ -502,6 +612,29 @@ function CityView() {
         alert(msg);
       }
     );
+  };
+
+  const handleSaveCityEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(`/api/cities/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editCityForm.name,
+          unit_id: editCityForm.unit_id ? Number(editCityForm.unit_id) : null
+        }),
+      });
+      if (res.ok) {
+        setIsEditingCity(false);
+        // Refresh local data
+        setCityName(editCityForm.name);
+        const unit = units.find(u => u.id === Number(editCityForm.unit_id));
+        setUnitName(unit ? unit.name : null);
+      }
+    } catch (error) {
+      console.error('Failed to update city', error);
+    }
   };
 
   const handleAddCTO = async (e: React.FormEvent) => {
@@ -565,10 +698,60 @@ function CityView() {
                 {unitName}
               </span>
             )}
+            <button 
+              onClick={() => setIsEditingCity(true)}
+              className="p-1 text-slate-400 hover:text-indigo-600 transition-colors"
+              title="Editar Cidade"
+            >
+              <Edit2 className="w-4 h-4" />
+            </button>
           </div>
           <p className="text-slate-500">Gerencie as CTOs desta cidade.</p>
         </div>
       </div>
+
+      {/* City Edit Modal */}
+      {isEditingCity && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <Card className="max-w-md w-full p-6 shadow-xl">
+            <div className="flex justify-between items-start mb-6">
+              <h2 className="text-xl font-bold">Editar Cidade</h2>
+              <button onClick={() => setIsEditingCity(false)} className="text-slate-400 hover:text-slate-600">
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveCityEdit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nome da Cidade</label>
+                <input
+                  required
+                  type="text"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={editCityForm.name}
+                  onChange={(e) => setEditCityForm({ ...editCityForm, name: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Unidade</label>
+                <select
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={editCityForm.unit_id}
+                  onChange={(e) => setEditCityForm({ ...editCityForm, unit_id: e.target.value })}
+                >
+                  <option value="">Sem Unidade</option>
+                  {units.map(unit => (
+                    <option key={unit.id} value={unit.id}>{unit.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <Button type="button" variant="secondary" onClick={() => setIsEditingCity(false)}>Cancelar</Button>
+                <Button type="submit">Salvar Alterações</Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
 
       <Tabs
         activeTab={activeTab}
