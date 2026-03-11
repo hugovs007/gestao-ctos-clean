@@ -19,6 +19,6 @@ if (!process.env.DATABASE_URL) {
 }
 
 // Agora importa e executa o servidor
-import('./server.ts').catch(err => {
+import('./api/server.ts').catch(err => {
   console.error('Erro ao iniciar servidor:', err);
 });
