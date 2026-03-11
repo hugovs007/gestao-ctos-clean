@@ -15,9 +15,68 @@ app.use(express.json());
 initializeDb().catch(console.error);
 
 // API Routes
-app.get("/api/cities", async (req, res) => {
+
+// Units
+app.get("/api/units", async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM cities ORDER BY name");
+    const result = await pool.query("SELECT * FROM units ORDER BY name");
+    res.json(result.rows);
+  } catch (error: any) {
+    console.error("Error fetching units:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/units", async (req, res) => {
+  const { name } = req.body;
+  try {
+    const result = await pool.query(
+      "INSERT INTO units (name) VALUES ($1) RETURNING id, name",
+      [name]
+    );
+    res.json(result.rows[0]);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.put("/api/units/:id", async (req, res) => {
+  const { name } = req.body;
+  try {
+    await pool.query(
+      "UPDATE units SET name = $1 WHERE id = $2",
+      [name, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.delete("/api/units/:id", async (req, res) => {
+  try {
+    await pool.query("DELETE FROM units WHERE id = $1", [req.params.id]);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Cities
+app.get("/api/cities", async (req, res) => {
+  const { unit_id } = req.query;
+  try {
+    let query = "SELECT * FROM cities";
+    let params: any[] = [];
+    
+    if (unit_id) {
+      query += " WHERE unit_id = $1";
+      params.push(unit_id);
+    }
+    
+    query += " ORDER BY name";
+    
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (error: any) {
     console.error("Error fetching cities:", error);
@@ -26,11 +85,11 @@ app.get("/api/cities", async (req, res) => {
 });
 
 app.post("/api/cities", async (req, res) => {
-  const { name } = req.body;
+  const { name, unit_id } = req.body;
   try {
     const result = await pool.query(
-      "INSERT INTO cities (name) VALUES ($1) RETURNING id, name",
-      [name]
+      "INSERT INTO cities (name, unit_id) VALUES ($1, $2) RETURNING id, name, unit_id",
+      [name, unit_id || null]
     );
     res.json(result.rows[0]);
   } catch (error: any) {

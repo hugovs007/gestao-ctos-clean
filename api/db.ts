@@ -33,9 +33,15 @@ export const initializeDb = async () => {
   const client = await pool.connect();
   try {
     await client.query(`
-      CREATE TABLE IF NOT EXISTS cities (
+      CREATE TABLE IF NOT EXISTS units (
         id SERIAL PRIMARY KEY,
         name TEXT NOT NULL UNIQUE
+      );
+
+      CREATE TABLE IF NOT EXISTS cities (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        unit_id INTEGER REFERENCES units(id) ON DELETE SET NULL
       );
 
       CREATE TABLE IF NOT EXISTS ctos (
@@ -60,15 +66,25 @@ export const initializeDb = async () => {
       );
     `);
     
-    // Check if pppoe column exists (migration logic)
-    const res = await client.query(`
+    // Migrations logic
+    // Check if pppoe column exists in clients
+    const pppoeRes = await client.query(`
       SELECT column_name 
       FROM information_schema.columns 
       WHERE table_name='clients' AND column_name='pppoe';
     `);
-    
-    if (res.rowCount === 0) {
+    if (pppoeRes.rowCount === 0) {
       await client.query("ALTER TABLE clients ADD COLUMN pppoe TEXT");
+    }
+
+    // Check if unit_id column exists in cities
+    const unitIdRes = await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='cities' AND column_name='unit_id';
+    `);
+    if (unitIdRes.rowCount === 0) {
+      await client.query("ALTER TABLE cities ADD COLUMN unit_id INTEGER REFERENCES units(id) ON DELETE SET NULL");
     }
 
   } catch (err) {

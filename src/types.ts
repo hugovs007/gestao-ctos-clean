@@ -1,6 +1,12 @@
+export interface Unit {
+  id: number;
+  name: string;
+}
+
 export interface City {
   id: number;
   name: string;
+  unit_id: number | null;
 }
 
 export interface CTO {

@@ -3,7 +3,7 @@ import { Routes, Route, Link, useParams, useNavigate, useLocation } from 'react-
 import { Plus, Server, MapPin, Users, Search, ArrowLeft, Trash2, Edit2, CheckCircle, XCircle, ExternalLink, AlertTriangle } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { City, CTO, Client } from './types.js';
+import { Unit, City, CTO, Client } from './types.js';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -107,14 +107,36 @@ function AddressDisplay({ address, className }: { address?: string; className?: 
 // --- Pages ---
 
 function Dashboard() {
+  const [units, setUnits] = useState<Unit[]>([]);
   const [cities, setCities] = useState<City[]>([]);
   const [newCityName, setNewCityName] = useState('');
+  const [newCityUnitId, setNewCityUnitId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('cities');
+  
+  // Unit Management
+  const [showUnitModal, setShowUnitModal] = useState(false);
+  const [newUnitName, setNewUnitName] = useState('');
 
   useEffect(() => {
-    fetchCities();
+    fetchData();
   }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    await Promise.all([fetchUnits(), fetchCities()]);
+    setLoading(false);
+  };
+
+  const fetchUnits = async () => {
+    try {
+      const res = await fetch('/api/units');
+      const data = await res.json();
+      if (Array.isArray(data)) setUnits(data);
+    } catch (error) {
+      console.error('Failed to fetch units', error);
+    }
+  };
 
   const fetchCities = async () => {
     try {
@@ -141,15 +163,50 @@ function Dashboard() {
       const res = await fetch('/api/cities', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newCityName }),
+        body: JSON.stringify({ 
+          name: newCityName, 
+          unit_id: newCityUnitId ? Number(newCityUnitId) : null 
+        }),
       });
       if (res.ok) {
         setNewCityName('');
+        setNewCityUnitId('');
         fetchCities();
-        setActiveTab('cities'); // Switch back to list
+        setActiveTab('cities');
       }
     } catch (error) {
       console.error('Failed to add city', error);
+    }
+  };
+
+  const handleAddUnit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUnitName.trim()) return;
+
+    try {
+      const res = await fetch('/api/units', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newUnitName }),
+      });
+      if (res.ok) {
+        setNewUnitName('');
+        setShowUnitModal(false);
+        fetchUnits();
+      }
+    } catch (error) {
+      console.error('Failed to add unit', error);
+    }
+  };
+
+  const handleDeleteUnit = async (id: number) => {
+    if (!confirm('Tem certeza que deseja excluir esta unidade? As cidades ficarão sem unidade.')) return;
+    try {
+      await fetch(`/api/units/${id}`, { method: 'DELETE' });
+      fetchUnits();
+      fetchCities();
+    } catch (error) {
+      console.error('Failed to delete unit', error);
     }
   };
 
@@ -157,9 +214,13 @@ function Dashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Cidades</h1>
-          <p className="text-slate-500">Gerencie as cidades da sua rede.</p>
+          <h1 className="text-2xl font-bold text-slate-900">Infraestrutura</h1>
+          <p className="text-slate-500">Gerencie as unidades e cidades da sua rede.</p>
         </div>
+        <Button variant="secondary" onClick={() => setShowUnitModal(true)}>
+          <Plus className="w-4 h-4 mr-2" />
+          Gerenciar Unidades
+        </Button>
       </div>
 
       <Tabs
@@ -185,6 +246,19 @@ function Dashboard() {
                 onChange={(e) => setNewCityName(e.target.value)}
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Unidade (Opcional)</label>
+              <select
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                value={newCityUnitId}
+                onChange={(e) => setNewCityUnitId(e.target.value)}
+              >
+                <option value="">Sem Unidade</option>
+                {units.map(unit => (
+                  <option key={unit.id} value={unit.id}>{unit.name}</option>
+                ))}
+              </select>
+            </div>
             <div className="flex justify-end">
               <Button type="submit">
                 <Plus className="w-4 h-4 mr-2" />
@@ -204,26 +278,141 @@ function Dashboard() {
               <p className="text-slate-500">Adicione uma cidade para começar.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {cities.map((city) => (
-                <Link key={city.id} to={`/city/${city.id}`}>
-                  <Card className="hover:border-indigo-500 transition-colors cursor-pointer h-full">
-                    <div className="p-6">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600">
-                          <MapPin className="w-6 h-6" />
+            <div className="space-y-8">
+              {units.length > 0 ? (
+                <>
+                  {units.map(unit => {
+                    const unitCities = cities.filter(c => c.unit_id === unit.id);
+                    if (unitCities.length === 0) return null;
+                    return (
+                      <div key={unit.id} className="space-y-4">
+                        <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                          <div className="w-2 h-6 bg-indigo-500 rounded-full" />
+                          {unit.name}
+                        </h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                          {unitCities.map((city) => (
+                            <Link key={city.id} to={`/city/${city.id}`}>
+                              <Card className="hover:border-indigo-500 transition-colors cursor-pointer h-full">
+                                <div className="p-6">
+                                  <div className="flex items-center justify-between mb-4">
+                                    <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600">
+                                      <MapPin className="w-6 h-6" />
+                                    </div>
+                                    <ArrowLeft className="w-5 h-5 text-slate-300 rotate-180" />
+                                  </div>
+                                  <h3 className="text-lg font-semibold text-slate-900">{city.name}</h3>
+                                  <p className="text-sm text-slate-500 mt-1">Clique para ver CTOs</p>
+                                </div>
+                              </Card>
+                            </Link>
+                          ))}
                         </div>
-                        <ArrowLeft className="w-5 h-5 text-slate-300 rotate-180" />
                       </div>
-                      <h3 className="text-lg font-semibold text-slate-900">{city.name}</h3>
-                      <p className="text-sm text-slate-500 mt-1">Clique para ver CTOs</p>
+                    );
+                  })}
+
+                  {cities.filter(c => !c.unit_id).length > 0 && (
+                    <div className="space-y-4">
+                      <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <div className="w-2 h-6 bg-slate-400 rounded-full" />
+                        Sem Unidade
+                      </h2>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {cities.filter(c => !c.unit_id).map((city) => (
+                          <Link key={city.id} to={`/city/${city.id}`}>
+                            <Card className="hover:border-indigo-500 transition-colors cursor-pointer h-full">
+                              <div className="p-6">
+                                <div className="flex items-center justify-between mb-4">
+                                  <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-600">
+                                    <MapPin className="w-6 h-6" />
+                                  </div>
+                                  <ArrowLeft className="w-5 h-5 text-slate-300 rotate-180" />
+                                </div>
+                                <h3 className="text-lg font-semibold text-slate-900">{city.name}</h3>
+                                <p className="text-sm text-slate-500 mt-1">Clique para ver CTOs</p>
+                              </div>
+                            </Card>
+                          </Link>
+                        ))}
+                      </div>
                     </div>
-                  </Card>
-                </Link>
-              ))}
+                  )}
+                </>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {cities.map((city) => (
+                    <Link key={city.id} to={`/city/${city.id}`}>
+                      <Card className="hover:border-indigo-500 transition-colors cursor-pointer h-full">
+                        <div className="p-6">
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600">
+                              <MapPin className="w-6 h-6" />
+                            </div>
+                            <ArrowLeft className="w-5 h-5 text-slate-300 rotate-180" />
+                          </div>
+                          <h3 className="text-lg font-semibold text-slate-900">{city.name}</h3>
+                          <p className="text-sm text-slate-500 mt-1">Clique para ver CTOs</p>
+                        </div>
+                      </Card>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </>
+      )}
+
+      {/* Unit Management Modal */}
+      {showUnitModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-xl">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 className="text-xl font-bold">Gerenciar Unidades</h2>
+                <p className="text-slate-500 text-sm">Crie e gerencie os conjuntos de cidades.</p>
+              </div>
+              <button onClick={() => setShowUnitModal(false)} className="text-slate-400 hover:text-slate-600">
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddUnit} className="flex gap-2 mb-6">
+              <input
+                required
+                type="text"
+                placeholder="Nome da nova unidade"
+                className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                value={newUnitName}
+                onChange={(e) => setNewUnitName(e.target.value)}
+              />
+              <Button type="submit">Adicionar</Button>
+            </form>
+
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {units.length === 0 ? (
+                <div className="text-center py-4 text-slate-500 italic">Nenhuma unidade cadastrada.</div>
+              ) : (
+                units.map(unit => (
+                  <div key={unit.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <span className="font-medium text-slate-900">{unit.name}</span>
+                    <button 
+                      onClick={() => handleDeleteUnit(unit.id)}
+                      className="p-1.5 text-slate-400 hover:text-red-600 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end">
+              <Button onClick={() => setShowUnitModal(false)}>Fechar</Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -234,6 +423,7 @@ function CityView() {
   const navigate = useNavigate();
   const [ctos, setCtos] = useState<CTO[]>([]);
   const [cityName, setCityName] = useState('');
+  const [unitName, setUnitName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('ctos');
 
@@ -248,12 +438,30 @@ function CityView() {
 
   useEffect(() => {
     fetchCTOs();
-    fetch('/api/cities').then(r => r.json()).then((cities) => {
-      if (Array.isArray(cities)) {
-        const city = cities.find((c: City) => c.id === Number(id));
-        if (city) setCityName(city.name);
+    const fetchCityData = async () => {
+      try {
+        const [citiesReq, unitsReq] = await Promise.all([
+          fetch('/api/cities'),
+          fetch('/api/units')
+        ]);
+        const cities = await citiesReq.json();
+        const units = await unitsReq.json();
+        
+        if (Array.isArray(cities)) {
+          const city = cities.find((c: City) => c.id === Number(id));
+          if (city) {
+            setCityName(city.name);
+            if (city.unit_id && Array.isArray(units)) {
+              const unit = units.find((u: Unit) => u.id === city.unit_id);
+              if (unit) setUnitName(unit.name);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch city data', err);
       }
-    });
+    };
+    fetchCityData();
   }, [id]);
 
   const fetchCTOs = async () => {
@@ -350,7 +558,14 @@ function CityView() {
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{cityName || 'Cidade'}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-slate-900">{cityName || 'Cidade'}</h1>
+            {unitName && (
+              <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-xs font-semibold rounded-full border border-indigo-100">
+                {unitName}
+              </span>
+            )}
+          </div>
           <p className="text-slate-500">Gerencie as CTOs desta cidade.</p>
         </div>
       </div>
