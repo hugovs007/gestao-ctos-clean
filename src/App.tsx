@@ -525,6 +525,7 @@ function Dashboard() {
 
             <div className="flex justify-between items-center">
               <p className="text-xs text-slate-400 max-w-xs">
+                Limite aumentado: Suporta até 10.000 linhas por vez. 
                 O sistema identificará Cidade, Sigla (CTO), Latitude e Longitude automaticamente.
               </p>
               <div className="flex gap-3">

@@ -9,7 +9,8 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Initialize DB
 initializeDb().catch(console.error);
@@ -223,44 +224,90 @@ app.delete("/api/clients/:id", async (req, res) => {
 
 // Bulk Import
 app.post("/api/import", async (req, res) => {
-  const { rows } = req.body; // Array of { sigla, sigla_poste, cidade, lat, lng, endereco }
-  
+  const { rows } = req.body; 
+  if (!rows || !Array.isArray(rows)) return res.status(400).json({ error: "Invalid data" });
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    let importedCount = 0;
     
-    for (const row of rows) {
-      // 1. Clean data
-      const cityName = row.cidade.replace(/\s*\(Imp\.\)$/i, '').trim();
+    // 1. Process cities first (Batch)
+    const uniqueCities = Array.from(new Set(rows.map(r => r.cidade.replace(/\s*\(Imp\.\)$/i, '').trim())));
+    
+    // Insert all cities, ignoring duplicates
+    if (uniqueCities.length > 0) {
+      await client.query(`
+        INSERT INTO cities (name)
+        SELECT * FROM UNNEST($1::text[])
+        ON CONFLICT (name) DO NOTHING
+      `, [uniqueCities]);
+    }
+    
+    // Get all relevant city IDs in one go
+    const cityMapRes = await client.query("SELECT id, name FROM cities WHERE name = ANY($1)", [uniqueCities]);
+    const cityIdMap = new Map(cityMapRes.rows.map(r => [r.name.toLowerCase(), r.id]));
+    
+    // 2. Prepare CTO data
+    const ctoData = rows.map(row => {
+      const cityName = row.cidade.replace(/\s*\(Imp\.\)$/i, '').trim().toLowerCase();
+      const cityId = cityIdMap.get(cityName);
+      
       let ctoName = row.sigla && row.sigla !== '**' ? row.sigla : row.sigla_poste;
       ctoName = ctoName?.trim() || 'Sem Nome';
       
       const location = row.endereco?.trim() || `${row.lat}, ${row.lng}`;
       
-      // 2. Ensure City exists
-      let cityId;
-      const cityRes = await client.query("SELECT id FROM cities WHERE name ILIKE $1", [cityName]);
-      if (cityRes.rowCount > 0) {
-        cityId = cityRes.rows[0].id;
-      } else {
-        const newCity = await client.query("INSERT INTO cities (name) VALUES ($1) RETURNING id", [cityName]);
-        cityId = newCity.rows[0].id;
+      return cityId ? [ctoName, cityId, location, 16] : null;
+    }).filter(Boolean);
+
+    // 3. Batch insert CTOs using a temporary table for deduplication
+    // This is safer and faster for large sets than individual checks
+    if (ctoData.length > 0) {
+      // Create temp table to handle the batch logic
+      await client.query(`
+        CREATE TEMP TABLE temp_import_ctos (
+          name TEXT,
+          city_id INTEGER,
+          address TEXT,
+          total_ports INTEGER
+        ) ON COMMIT DROP
+      `);
+
+      // Fill temp table
+      // Constructing values string for multiple insertion to avoid one query per row
+      // For 10k rows, we might need to chunk this or use a cleaner approach like UNNEST if PG version permits
+      const values = [];
+      const params = [];
+      for (let i = 0; i < ctoData.length; i++) {
+        const offset = i * 4;
+        values.push(`($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4})`);
+        params.push(...ctoData[i]);
       }
+
+      await client.query(`
+        INSERT INTO temp_import_ctos (name, city_id, address, total_ports)
+        VALUES ${values.join(',')}
+      `, params);
+
+      // Insert into real table where NOT EXISTS (deduplication)
+      const insertRes = await client.query(`
+        INSERT INTO ctos (name, city_id, address, total_ports)
+        SELECT DISTINCT t.name, t.city_id, t.address, t.total_ports
+        FROM temp_import_ctos t
+        WHERE NOT EXISTS (
+          SELECT 1 FROM ctos c 
+          WHERE c.city_id = t.city_id AND c.name = t.name
+        )
+        RETURNING id
+      `);
       
-      // 3. Create CTO (skip if exists in same city with same name)
-      const ctoExists = await client.query("SELECT id FROM ctos WHERE city_id = $1 AND name = $2", [cityId, ctoName]);
-      if (ctoExists.rowCount === 0) {
-        await client.query(
-          "INSERT INTO ctos (name, city_id, address, total_ports) VALUES ($1, $2, $3, $4)",
-          [ctoName, cityId, location, 16]
-        );
-        importedCount++;
-      }
+      const importedCount = insertRes.rowCount || 0;
+      await client.query('COMMIT');
+      res.json({ success: true, count: importedCount });
+    } else {
+      await client.query('COMMIT');
+      res.json({ success: true, count: 0 });
     }
-    
-    await client.query('COMMIT');
-    res.json({ success: true, count: importedCount });
   } catch (error: any) {
     await client.query('ROLLBACK');
     console.error("Import error:", error);
