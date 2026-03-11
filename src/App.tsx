@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Plus, Server, MapPin, Users, Search, ArrowLeft, Trash2, Edit2, CheckCircle, XCircle, ExternalLink, AlertTriangle } from 'lucide-react';
+import { Plus, Server, MapPin, Users, Search, ArrowLeft, Trash2, Edit2, CheckCircle, XCircle, ExternalLink, AlertTriangle, ChevronDown } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { Unit, City, CTO, Client } from './types.js';
@@ -121,6 +121,8 @@ function Dashboard() {
   // City Editing
   const [editingCity, setEditingCity] = useState<City | null>(null);
   const [editCityForm, setEditCityForm] = useState({ name: '', unit_id: '' });
+  const [expandedUnits, setExpandedUnits] = useState<Record<number, boolean>>({});
+  const [unassignedExpanded, setUnassignedExpanded] = useState(true);
 
   useEffect(() => {
     fetchData();
@@ -242,6 +244,13 @@ function Dashboard() {
     }
   };
 
+  const toggleUnit = (unitId: number) => {
+    setExpandedUnits(prev => ({
+      ...prev,
+      [unitId]: !prev[unitId]
+    }));
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -316,19 +325,86 @@ function Dashboard() {
                   {units.map(unit => {
                     const unitCities = cities.filter(c => c.unit_id === unit.id);
                     if (unitCities.length === 0) return null;
+                    const isExpanded = expandedUnits[unit.id] ?? true; // Default to expanded
+
                     return (
                       <div key={unit.id} className="space-y-4">
+                        <button 
+                          onClick={() => toggleUnit(unit.id)}
+                          className="w-full flex items-center justify-between group"
+                        >
+                          <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <div className="w-2 h-6 bg-indigo-500 rounded-full" />
+                            {unit.name}
+                            <span className="text-sm font-normal text-slate-400">({unitCities.length})</span>
+                          </h2>
+                          <div className={cn(
+                            "p-1 rounded-lg text-slate-400 group-hover:bg-slate-100 transition-all",
+                            isExpanded ? "rotate-180" : ""
+                          )}>
+                            <ChevronDown className="w-5 h-5" />
+                          </div>
+                        </button>
+                        
+                        {isExpanded && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-top-2 duration-200">
+                            {unitCities.map((city) => (
+                              <Link key={city.id} to={`/city/${city.id}`}>
+                                <Card className="hover:border-indigo-500 transition-colors cursor-pointer h-full">
+                                  <div className="p-6">
+                                    <div className="flex items-center justify-between mb-4">
+                                      <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600">
+                                        <MapPin className="w-6 h-6" />
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <button 
+                                          onClick={(e) => handleOpenEditCity(e, city)}
+                                          className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors"
+                                        >
+                                          <Edit2 className="w-4 h-4" />
+                                        </button>
+                                        <ArrowLeft className="w-5 h-5 text-slate-300 rotate-180" />
+                                      </div>
+                                    </div>
+                                    <h3 className="text-lg font-semibold text-slate-900">{city.name}</h3>
+                                    <p className="text-sm text-slate-500 mt-1">Clique para ver CTOs</p>
+                                  </div>
+                                </Card>
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {cities.filter(c => !c.unit_id).length > 0 && (
+                    <div className="space-y-4">
+                      <button 
+                        onClick={() => setUnassignedExpanded(!unassignedExpanded)}
+                        className="w-full flex items-center justify-between group"
+                      >
                         <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                          <div className="w-2 h-6 bg-indigo-500 rounded-full" />
-                          {unit.name}
+                          <div className="w-2 h-6 bg-slate-400 rounded-full" />
+                          Sem Unidade
+                          <span className="text-sm font-normal text-slate-400">({cities.filter(c => !c.unit_id).length})</span>
                         </h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                          {unitCities.map((city) => (
+                        <div className={cn(
+                          "p-1 rounded-lg text-slate-400 group-hover:bg-slate-100 transition-all",
+                          unassignedExpanded ? "rotate-180" : ""
+                        )}>
+                          <ChevronDown className="w-5 h-5" />
+                        </div>
+                      </button>
+                      
+                      {unassignedExpanded && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-top-2 duration-200">
+                          {cities.filter(c => !c.unit_id).map((city) => (
                             <Link key={city.id} to={`/city/${city.id}`}>
                               <Card className="hover:border-indigo-500 transition-colors cursor-pointer h-full">
                                 <div className="p-6">
                                   <div className="flex items-center justify-between mb-4">
-                                    <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600">
+                                    <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-600">
                                       <MapPin className="w-6 h-6" />
                                     </div>
                                     <div className="flex items-center gap-1">
@@ -348,42 +424,7 @@ function Dashboard() {
                             </Link>
                           ))}
                         </div>
-                      </div>
-                    );
-                  })}
-
-                  {cities.filter(c => !c.unit_id).length > 0 && (
-                    <div className="space-y-4">
-                      <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                        <div className="w-2 h-6 bg-slate-400 rounded-full" />
-                        Sem Unidade
-                      </h2>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {cities.filter(c => !c.unit_id).map((city) => (
-                          <Link key={city.id} to={`/city/${city.id}`}>
-                            <Card className="hover:border-indigo-500 transition-colors cursor-pointer h-full">
-                              <div className="p-6">
-                                <div className="flex items-center justify-between mb-4">
-                                  <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-600">
-                                    <MapPin className="w-6 h-6" />
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <button 
-                                      onClick={(e) => handleOpenEditCity(e, city)}
-                                      className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors"
-                                    >
-                                      <Edit2 className="w-4 h-4" />
-                                    </button>
-                                    <ArrowLeft className="w-5 h-5 text-slate-300 rotate-180" />
-                                  </div>
-                                </div>
-                                <h3 className="text-lg font-semibold text-slate-900">{city.name}</h3>
-                                <p className="text-sm text-slate-500 mt-1">Clique para ver CTOs</p>
-                              </div>
-                            </Card>
-                          </Link>
-                        ))}
-                      </div>
+                      )}
                     </div>
                   )}
                 </>
