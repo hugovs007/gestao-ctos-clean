@@ -54,8 +54,8 @@ function Button({ className, variant = 'primary', ...props }: React.ButtonHTMLAt
   );
 }
 
-function Card({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <div className={cn('bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden', className)}>{children}</div>;
+function Card({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn('bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden', className)} {...props}>{children}</div>;
 }
 
 function Badge({ status }: { status: 'active' | 'inactive' }) {
@@ -117,6 +117,7 @@ function Dashboard() {
   // Unit Management
   const [showUnitModal, setShowUnitModal] = useState(false);
   const [newUnitName, setNewUnitName] = useState('');
+  const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null);
 
   // City Editing
   const [editingCity, setEditingCity] = useState<City | null>(null);
@@ -268,7 +269,7 @@ function Dashboard() {
         activeTab={activeTab}
         onChange={setActiveTab}
         tabs={[
-          { id: 'cities', label: 'Lista de Cidades' },
+          { id: 'cities', label: 'Lista de Unidades' },
           { id: 'new', label: 'Cadastrar Cidade' },
         ]}
       />
@@ -320,140 +321,106 @@ function Dashboard() {
             </div>
           ) : (
             <div className="space-y-8">
-              {units.length > 0 ? (
-                <>
-                  {units.map(unit => {
-                    const unitCities = cities.filter(c => c.unit_id === unit.id);
-                    if (unitCities.length === 0) return null;
-                    const isExpanded = expandedUnits[unit.id] ?? true; // Default to expanded
-
-                    return (
-                      <div key={unit.id} className="space-y-4">
-                        <button 
-                          onClick={() => toggleUnit(unit.id)}
-                          className="w-full flex items-center justify-between group"
-                        >
-                          <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                            <div className="w-2 h-6 bg-indigo-500 rounded-full" />
-                            {unit.name}
-                            <span className="text-sm font-normal text-slate-400">({unitCities.length})</span>
-                          </h2>
-                          <div className={cn(
-                            "p-1 rounded-lg text-slate-400 group-hover:bg-slate-100 transition-all",
-                            isExpanded ? "rotate-180" : ""
-                          )}>
-                            <ChevronDown className="w-5 h-5" />
-                          </div>
-                        </button>
-                        
-                        {isExpanded && (
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-top-2 duration-200">
-                            {unitCities.map((city) => (
-                              <Link key={city.id} to={`/city/${city.id}`}>
-                                <Card className="hover:border-indigo-500 transition-colors cursor-pointer h-full">
-                                  <div className="p-6">
-                                    <div className="flex items-center justify-between mb-4">
-                                      <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600">
-                                        <MapPin className="w-6 h-6" />
-                                      </div>
-                                      <div className="flex items-center gap-1">
-                                        <button 
-                                          onClick={(e) => handleOpenEditCity(e, city)}
-                                          className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors"
-                                        >
-                                          <Edit2 className="w-4 h-4" />
-                                        </button>
-                                        <ArrowLeft className="w-5 h-5 text-slate-300 rotate-180" />
-                                      </div>
-                                    </div>
-                                    <h3 className="text-lg font-semibold text-slate-900">{city.name}</h3>
-                                    <p className="text-sm text-slate-500 mt-1">Clique para ver CTOs</p>
-                                  </div>
-                                </Card>
-                              </Link>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  {cities.filter(c => !c.unit_id).length > 0 && (
-                    <div className="space-y-4">
-                      <button 
-                        onClick={() => setUnassignedExpanded(!unassignedExpanded)}
-                        className="w-full flex items-center justify-between group"
-                      >
-                        <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                          <div className="w-2 h-6 bg-slate-400 rounded-full" />
-                          Sem Unidade
-                          <span className="text-sm font-normal text-slate-400">({cities.filter(c => !c.unit_id).length})</span>
-                        </h2>
-                        <div className={cn(
-                          "p-1 rounded-lg text-slate-400 group-hover:bg-slate-100 transition-all",
-                          unassignedExpanded ? "rotate-180" : ""
-                        )}>
-                          <ChevronDown className="w-5 h-5" />
-                        </div>
-                      </button>
-                      
-                      {unassignedExpanded && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-top-2 duration-200">
-                          {cities.filter(c => !c.unit_id).map((city) => (
-                            <Link key={city.id} to={`/city/${city.id}`}>
-                              <Card className="hover:border-indigo-500 transition-colors cursor-pointer h-full">
-                                <div className="p-6">
-                                  <div className="flex items-center justify-between mb-4">
-                                    <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-600">
-                                      <MapPin className="w-6 h-6" />
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                      <button 
-                                        onClick={(e) => handleOpenEditCity(e, city)}
-                                        className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors"
-                                      >
-                                        <Edit2 className="w-4 h-4" />
-                                      </button>
-                                      <ArrowLeft className="w-5 h-5 text-slate-300 rotate-180" />
-                                    </div>
-                                  </div>
-                                  <h3 className="text-lg font-semibold text-slate-900">{city.name}</h3>
-                                  <p className="text-sm text-slate-500 mt-1">Clique para ver CTOs</p>
-                                </div>
-                              </Card>
-                            </Link>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              ) : (
+              {selectedUnitId === null ? (
+                /* Units Grid View */
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {cities.map((city) => (
-                    <Link key={city.id} to={`/city/${city.id}`}>
-                      <Card className="hover:border-indigo-500 transition-colors cursor-pointer h-full">
+                  {units.map(unit => {
+                    const unitCitiesCount = cities.filter(c => c.unit_id === unit.id).length;
+                    return (
+                      <Card 
+                        key={unit.id} 
+                        className="hover:border-indigo-500 transition-colors cursor-pointer group"
+                        onClick={() => setSelectedUnitId(unit.id)}
+                      >
                         <div className="p-6">
                           <div className="flex items-center justify-between mb-4">
-                            <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600">
-                              <MapPin className="w-6 h-6" />
+                            <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600 transition-transform group-hover:scale-110">
+                              <Server className="w-6 h-6" />
                             </div>
-                            <div className="flex items-center gap-1">
-                              <button 
-                                onClick={(e) => handleOpenEditCity(e, city)}
-                                className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-                              <ArrowLeft className="w-5 h-5 text-slate-300 rotate-180" />
-                            </div>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteUnit(unit.id);
+                              }}
+                              className="p-1.5 text-slate-300 hover:text-red-600 transition-colors"
+                              title="Excluir Unidade"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
-                          <h3 className="text-lg font-semibold text-slate-900">{city.name}</h3>
-                          <p className="text-sm text-slate-500 mt-1">Clique para ver CTOs</p>
+                          <h3 className="text-xl font-bold text-slate-900 mb-1">{unit.name}</h3>
+                          <p className="text-sm text-slate-500 flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            {unitCitiesCount} {unitCitiesCount === 1 ? 'Cidade' : 'Cidades'}
+                          </p>
                         </div>
                       </Card>
-                    </Link>
-                  ))}
+                    );
+                  })}
+                  
+                  {/* Unassigned Cities "Pseudo-Unit" Card */}
+                  {cities.filter(c => !c.unit_id).length > 0 && (
+                    <Card 
+                      className="hover:border-slate-400 transition-colors cursor-pointer group border-dashed bg-slate-50/50"
+                      onClick={() => setSelectedUnitId(-1)} // -1 for unassigned
+                    >
+                      <div className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-slate-600">
+                            <MapPin className="w-6 h-6" />
+                          </div>
+                        </div>
+                        <h3 className="text-xl font-bold text-slate-900 mb-1">Sem Unidade</h3>
+                        <p className="text-sm text-slate-500">
+                          {cities.filter(c => !c.unit_id).length} Cidades pendentes
+                        </p>
+                      </div>
+                    </Card>
+                  )}
+                </div>
+              ) : (
+                /* Selected Unit Detail View */
+                <div className="space-y-6">
+                  <div className="flex items-center gap-4">
+                    <Button variant="ghost" onClick={() => setSelectedUnitId(null)} className="!p-2">
+                      <ArrowLeft className="w-5 h-5" />
+                    </Button>
+                    <div>
+                      <h2 className="text-2xl font-bold text-slate-900">
+                        {selectedUnitId === -1 ? 'Sem Unidade' : units.find(u => u.id === selectedUnitId)?.name}
+                      </h2>
+                      <p className="text-slate-500">Cidades pertencentes a esta unidade.</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-left-4 duration-300">
+                    {cities
+                      .filter(c => selectedUnitId === -1 ? !c.unit_id : c.unit_id === selectedUnitId)
+                      .map((city) => (
+                        <Link key={city.id} to={`/city/${city.id}`}>
+                          <Card className="hover:border-indigo-500 transition-colors cursor-pointer h-full border-l-4 border-l-indigo-500">
+                            <div className="p-6">
+                              <div className="flex items-center justify-between mb-4">
+                                <div className="w-10 h-10 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
+                                  <MapPin className="w-6 h-6" />
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <button 
+                                    onClick={(e) => handleOpenEditCity(e, city)}
+                                    className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                  <ArrowLeft className="w-5 h-5 text-slate-300 rotate-180" />
+                                </div>
+                              </div>
+                              <h3 className="text-lg font-bold text-slate-900">{city.name}</h3>
+                              <p className="text-sm text-slate-500 mt-1 italic">Clique para ver infraestrutura</p>
+                            </div>
+                          </Card>
+                        </Link>
+                      ))}
+                  </div>
                 </div>
               )}
             </div>
