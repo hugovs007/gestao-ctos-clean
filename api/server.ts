@@ -221,6 +221,55 @@ app.delete("/api/clients/:id", async (req, res) => {
   }
 });
 
+// Bulk Import
+app.post("/api/import", async (req, res) => {
+  const { rows } = req.body; // Array of { sigla, sigla_poste, cidade, lat, lng, endereco }
+  
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    let importedCount = 0;
+    
+    for (const row of rows) {
+      // 1. Clean data
+      const cityName = row.cidade.replace(/\s*\(Imp\.\)$/i, '').trim();
+      let ctoName = row.sigla && row.sigla !== '**' ? row.sigla : row.sigla_poste;
+      ctoName = ctoName?.trim() || 'Sem Nome';
+      
+      const location = row.endereco?.trim() || `${row.lat}, ${row.lng}`;
+      
+      // 2. Ensure City exists
+      let cityId;
+      const cityRes = await client.query("SELECT id FROM cities WHERE name ILIKE $1", [cityName]);
+      if (cityRes.rowCount > 0) {
+        cityId = cityRes.rows[0].id;
+      } else {
+        const newCity = await client.query("INSERT INTO cities (name) VALUES ($1) RETURNING id", [cityName]);
+        cityId = newCity.rows[0].id;
+      }
+      
+      // 3. Create CTO (skip if exists in same city with same name)
+      const ctoExists = await client.query("SELECT id FROM ctos WHERE city_id = $1 AND name = $2", [cityId, ctoName]);
+      if (ctoExists.rowCount === 0) {
+        await client.query(
+          "INSERT INTO ctos (name, city_id, address, total_ports) VALUES ($1, $2, $3, $4)",
+          [ctoName, cityId, location, 16]
+        );
+        importedCount++;
+      }
+    }
+    
+    await client.query('COMMIT');
+    res.json({ success: true, count: importedCount });
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    console.error("Import error:", error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
 // Search
 app.get("/api/search", async (req, res) => {
   try {

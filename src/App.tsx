@@ -113,6 +113,9 @@ function Dashboard() {
   const [newCityUnitId, setNewCityUnitId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('cities');
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
   
   // Unit Management
   const [showUnitModal, setShowUnitModal] = useState(false);
@@ -259,10 +262,16 @@ function Dashboard() {
           <h1 className="text-2xl font-bold text-slate-900">Infraestrutura</h1>
           <p className="text-slate-500">Gerencie as unidades e cidades da sua rede.</p>
         </div>
-        <Button variant="secondary" onClick={() => setShowUnitModal(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Gerenciar Unidades
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={() => setShowImportModal(true)}>
+            <Search className="w-4 h-4 mr-2" />
+            Importar Dados
+          </Button>
+          <Button variant="secondary" onClick={() => setShowUnitModal(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Gerenciar Unidades
+          </Button>
+        </div>
       </div>
 
       <Tabs
@@ -474,6 +483,95 @@ function Dashboard() {
 
             <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end">
               <Button onClick={() => setShowUnitModal(false)}>Fechar</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-2xl w-full p-6 shadow-xl">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h2 className="text-xl font-bold">Importar Dados (Geogrid)</h2>
+                <p className="text-slate-500 text-sm">Cole as linhas da sua planilha Geogrid abaixo.</p>
+              </div>
+              <button onClick={() => setShowImportModal(false)} className="text-slate-400 hover:text-slate-600">
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Instruções: Selecione as linhas no Excel, copie (Ctrl+C) e cole aqui (Ctrl+V).
+              </label>
+              <textarea
+                className="w-full h-64 p-3 border border-slate-300 rounded-lg font-mono text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
+                placeholder="Id	Sigla	Sigla (poste)	Tag map	...	Cidade	..."
+                value={importText}
+                onChange={(e) => setImportText(e.target.value)}
+              />
+            </div>
+
+            <div className="flex justify-between items-center">
+              <p className="text-xs text-slate-400 max-w-xs">
+                O sistema identificará Cidade, Sigla (CTO), Latitude e Longitude automaticamente.
+              </p>
+              <div className="flex gap-3">
+                <Button variant="secondary" onClick={() => setShowImportModal(false)}>Cancelar</Button>
+                <Button 
+                  onClick={async () => {
+                    if (!importText.trim()) return;
+                    setIsImporting(true);
+                    try {
+                      // Parse TSV
+                      const lines = importText.split('\n');
+                      const rows = lines.map(line => {
+                        const cols = line.split('\t');
+                        if (cols.length < 17) return null;
+                        return {
+                          sigla: cols[1],
+                          sigla_poste: cols[2],
+                          lat: cols[5],
+                          lng: cols[6],
+                          endereco: cols[13],
+                          cidade: cols[16]
+                        };
+                      }).filter(r => r && r.cidade && r.cidade !== 'Cidade'); // Filter header and invalid rows
+
+                      if (rows.length === 0) {
+                        alert('Nenhum dado válido encontrado. Certifique-se de copiar as colunas corretas.');
+                        setIsImporting(false);
+                        return;
+                      }
+
+                      const res = await fetch('/api/import', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ rows })
+                      });
+                      const result = await res.json();
+                      if (res.ok) {
+                        alert(`${result.count} CTOs importadas com sucesso!`);
+                        setImportText('');
+                        setShowImportModal(false);
+                        fetchCities();
+                      } else {
+                        alert('Erro na importação: ' + result.error);
+                      }
+                    } catch (err) {
+                      console.error('Import failed', err);
+                      alert('Falha interna ao processar dados.');
+                    } finally {
+                      setIsImporting(false);
+                    }
+                  }}
+                  disabled={isImporting || !importText.trim()}
+                >
+                  {isImporting ? 'Importando...' : 'Iniciar Importação'}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
