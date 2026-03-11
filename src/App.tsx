@@ -82,8 +82,17 @@ function AddressDisplay({ address, className }: { address?: string; className?: 
                  address.includes('google.com/maps') || 
                  address.includes('goo.gl');
 
-  if (isLink) {
-    const href = address.startsWith('http') ? address : `https://${address}`;
+  // Check if it's a coordinate pattern: e.g., "-6.87037840, -36.91088628"
+  const isCoords = /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(address.trim());
+
+  if (isLink || isCoords) {
+    let href = address;
+    if (isCoords) {
+      href = `https://www.google.com/maps/search/?api=1&query=${address.trim()}`;
+    } else if (!address.startsWith('http')) {
+      href = `https://${address}`;
+    }
+
     return (
       <a
         href={href}
