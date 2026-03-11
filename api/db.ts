@@ -5,13 +5,14 @@ dotenv.config();
 
 if (!process.env.DATABASE_URL) {
   console.error("ERRO CRÍTICO: A variável de ambiente DATABASE_URL não está definida.");
+  console.error("Por favor, adicione DATABASE_URL nas configurações da Vercel.");
 }
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { 
+  connectionString: process.env.DATABASE_URL || "postgres://localhost:5432/postgres",
+  ssl: process.env.DATABASE_URL ? { 
     rejectUnauthorized: false,
-  },
+  } : false,
   connectionTimeoutMillis: 5000,
   idleTimeoutMillis: 30000,
   max: 10

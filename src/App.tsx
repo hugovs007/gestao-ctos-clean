@@ -3,7 +3,7 @@ import { Routes, Route, Link, useParams, useNavigate, useLocation } from 'react-
 import { Plus, Server, MapPin, Users, Search, ArrowLeft, Trash2, Edit2, CheckCircle, XCircle, ExternalLink, AlertTriangle } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { City, CTO, Client } from './types';
+import { City, CTO, Client } from './types.js';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -120,7 +120,12 @@ function Dashboard() {
     try {
       const res = await fetch('/api/cities');
       const data = await res.json();
-      setCities(data);
+      if (Array.isArray(data)) {
+        setCities(data);
+      } else {
+        console.error('API did not return an array for cities:', data);
+        setCities([]);
+      }
     } catch (error) {
       console.error('Failed to fetch cities', error);
     } finally {
@@ -243,9 +248,11 @@ function CityView() {
 
   useEffect(() => {
     fetchCTOs();
-    fetch('/api/cities').then(r => r.json()).then((cities: City[]) => {
-      const city = cities.find(c => c.id === Number(id));
-      if (city) setCityName(city.name);
+    fetch('/api/cities').then(r => r.json()).then((cities) => {
+      if (Array.isArray(cities)) {
+        const city = cities.find((c: City) => c.id === Number(id));
+        if (city) setCityName(city.name);
+      }
     });
   }, [id]);
 
@@ -253,7 +260,12 @@ function CityView() {
     try {
       const res = await fetch(`/api/cities/${id}/ctos`);
       const data = await res.json();
-      setCtos(data);
+      if (Array.isArray(data)) {
+        setCtos(data);
+      } else {
+        console.error('API did not return an array for CTOs:', data);
+        setCtos([]);
+      }
     } catch (error) {
       console.error('Failed to fetch CTOs', error);
     } finally {
