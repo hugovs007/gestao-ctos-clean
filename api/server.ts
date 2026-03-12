@@ -238,7 +238,7 @@ app.post("/api/import", async (req, res) => {
     if (uniqueCities.length > 0) {
       await client.query(`
         INSERT INTO cities (name)
-        SELECT * FROM UNNEST($1::text[])
+        SELECT DISTINCT name FROM UNNEST($1::text[]) as name
         ON CONFLICT (name) DO NOTHING
       `, [uniqueCities]);
     }
@@ -248,7 +248,7 @@ app.post("/api/import", async (req, res) => {
     const cityIdMap = new Map(cityMapRes.rows.map(r => [r.name.toLowerCase(), r.id]));
     
     // 2. Prepare CTO data
-    const ctoData = rows.map(row => {
+    const ctoData: any[][] = rows.map(row => {
       const cityName = row.cidade.replace(/\s*\(Imp\.\)$/i, '').trim().toLowerCase();
       const cityId = cityIdMap.get(cityName);
       
@@ -258,7 +258,7 @@ app.post("/api/import", async (req, res) => {
       const location = row.endereco?.trim() || `${row.lat}, ${row.lng}`;
       
       return cityId ? [ctoName, cityId, location, 16] : null;
-    }).filter(Boolean);
+    }).filter((r): r is any[] => r !== null);
 
     // 3. Batch insert CTOs using a temporary table for deduplication
     // This is safer and faster for large sets than individual checks

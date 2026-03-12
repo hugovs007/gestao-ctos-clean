@@ -87,6 +87,18 @@ export const initializeDb = async () => {
       await client.query("ALTER TABLE cities ADD COLUMN unit_id INTEGER REFERENCES units(id) ON DELETE SET NULL");
     }
 
+    // Sync sequences (Fix for "duplicate key value violates unique constraint")
+    const tables = ['units', 'cities', 'ctos', 'clients'];
+    for (const table of tables) {
+      await client.query(`
+        SELECT setval(
+          pg_get_serial_sequence('${table}', 'id'),
+          COALESCE((SELECT MAX(id) FROM ${table}), 0) + 1,
+          false
+        );
+      `);
+    }
+
   } catch (err) {
     console.error('Error initializing database', err);
   } finally {
