@@ -87,14 +87,19 @@ app.get("/api/cities", async (req, res) => {
 
 app.post("/api/cities", async (req, res) => {
   const { name, unit_id } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: "Nome da cidade é obrigatório" });
+  
+  const normalizedName = name.trim().toUpperCase();
+  
   try {
     const result = await pool.query(
-      "INSERT INTO cities (name, unit_id) VALUES ($1, $2) RETURNING id, name, unit_id",
-      [name, unit_id || null]
+      "INSERT INTO cities (name, unit_id) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET unit_id = EXCLUDED.unit_id RETURNING id, name, unit_id",
+      [normalizedName, unit_id || null]
     );
     res.json(result.rows[0]);
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    console.error("Error creating city:", error);
+    res.status(500).json({ error: error.message });
   }
 });
 

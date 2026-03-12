@@ -183,7 +183,7 @@ function Dashboard() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          name: newCityName, 
+          name: newCityName.trim().toUpperCase(), 
           unit_id: newCityUnitId ? Number(newCityUnitId) : null 
         }),
       });
@@ -192,9 +192,13 @@ function Dashboard() {
         setNewCityUnitId('');
         fetchCities();
         setActiveTab('cities');
+      } else {
+        const err = await res.json();
+        alert('Erro ao salvar cidade: ' + err.error);
       }
     } catch (error) {
       console.error('Failed to add city', error);
+      alert('Erro de conexão ao tentar salvar a cidade.');
     }
   };
 
