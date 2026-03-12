@@ -645,6 +645,7 @@ function CityView() {
   const [unitName, setUnitName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('ctos');
+  const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 100, pages: 1 });
 
   // Form state - novo CTO
   const [newCTOName, setNewCTOName] = useState('');
@@ -694,14 +695,16 @@ function CityView() {
     fetchCityData();
   }, [id]);
 
-  const fetchCTOs = async () => {
+  const fetchCTOs = async (page = 1) => {
     try {
-      const res = await fetch(`/api/cities/${id}/ctos`);
+      setLoading(true);
+      const res = await fetch(`/api/cities/${id}/ctos?page=${page}&limit=100`);
       const data = await res.json();
-      if (Array.isArray(data)) {
-        setCtos(data);
+      if (data.ctos && Array.isArray(data.ctos)) {
+        setCtos(data.ctos);
+        setPagination(data.pagination);
       } else {
-        console.error('API did not return an array for CTOs:', data);
+        console.error('API did not return correctly formatted CTO data:', data);
         setCtos([]);
       }
     } catch (error) {
@@ -941,7 +944,8 @@ function CityView() {
               <p className="text-slate-500">Adicione uma CTO para começar a documentar.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {ctos.map((cto) => (
                 <div key={cto.id} onClick={() => navigate(`/cto/${cto.id}`)} className="h-full">
                   <Card className="hover:border-indigo-500 transition-colors cursor-pointer h-full group">
@@ -999,6 +1003,34 @@ function CityView() {
                 </div>
               ))}
             </div>
+            {/* Pagination Controls */}
+            {pagination.pages > 1 && (
+              <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-200 pt-6">
+                <p className="text-sm text-slate-500">
+                  Mostrando <span className="font-medium">{((pagination.page - 1) * pagination.limit) + 1}</span> até <span className="font-medium">{Math.min(pagination.page * pagination.limit, pagination.total)}</span> de <span className="font-medium">{pagination.total}</span> CTOs
+                </p>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="secondary" 
+                    onClick={() => fetchCTOs(pagination.page - 1)}
+                    disabled={pagination.page === 1}
+                  >
+                    Anterior
+                  </Button>
+                  <div className="flex items-center px-4 bg-slate-50 rounded-lg border border-slate-200 text-sm font-medium text-slate-700">
+                    Página {pagination.page} de {pagination.pages}
+                  </div>
+                  <Button 
+                    variant="secondary" 
+                    onClick={() => fetchCTOs(pagination.page + 1)}
+                    disabled={pagination.page === pagination.pages}
+                  >
+                    Próxima
+                  </Button>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </>
       )}

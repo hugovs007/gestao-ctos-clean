@@ -119,22 +119,43 @@ app.put("/api/cities/:id", async (req, res) => {
 // CTOs
 app.get("/api/cities/:cityId/ctos", async (req, res) => {
   try {
-    const ctosResult = await pool.query(
-      "SELECT * FROM ctos WHERE city_id = $1 ORDER BY name",
-      [req.params.cityId]
-    );
-    const ctos = ctosResult.rows;
-    
-    // Get usage stats for each CTO
-    const ctosWithStats = await Promise.all(ctos.map(async (cto: any) => {
-      const usedPortsResult = await pool.query(
-        "SELECT COUNT(*) as count FROM clients WHERE cto_id = $1 AND status = 'active'",
-        [cto.id]
-      );
-      return { ...cto, used_ports: parseInt(usedPortsResult.rows[0].count) };
-    }));
+    const cityId = req.params.cityId;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 100;
+    const offset = (page - 1) * limit;
 
-    res.json(ctosWithStats);
+    // Get total count for pagination
+    const countResult = await pool.query(
+      "SELECT COUNT(*) FROM ctos WHERE city_id = $1",
+      [cityId]
+    );
+    const totalCount = parseInt(countResult.rows[0].count);
+
+    // Get CTOs with stats in a single query
+    const ctosResult = await pool.query(`
+      SELECT c.*, 
+             COALESCE(stats.used_ports, 0)::int as used_ports
+      FROM ctos c
+      LEFT JOIN (
+        SELECT cto_id, COUNT(*) as used_ports
+        FROM clients
+        WHERE status = 'active'
+        GROUP BY cto_id
+      ) stats ON c.id = stats.cto_id
+      WHERE c.city_id = $1
+      ORDER BY c.name
+      LIMIT $2 OFFSET $3
+    `, [cityId, limit, offset]);
+
+    res.json({
+      ctos: ctosResult.rows,
+      pagination: {
+        total: totalCount,
+        page,
+        limit,
+        pages: Math.ceil(totalCount / limit)
+      }
+    });
   } catch (error: any) {
     console.error("Error fetching CTOs:", error);
     res.status(500).json({ error: error.message });
