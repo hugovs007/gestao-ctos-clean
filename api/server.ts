@@ -231,26 +231,38 @@ app.post("/api/import", async (req, res) => {
   try {
     await client.query('BEGIN');
     
-    // 1. Process cities first (Batch)
-    const uniqueCities = Array.from(new Set(rows.map(r => r.cidade.replace(/\s*\(Imp\.\)$/i, '').trim())));
+    // 1. Process cities first (Batch & Case-Insensitive)
+    const cityNamesRaw = Array.from(new Set(rows.map(r => r.cidade.replace(/\s*\(Imp\.\)$/i, '').trim())));
+    const cityNamesLower = cityNamesRaw.map(n => n.toLowerCase());
     
-    // Insert all cities, ignoring duplicates
-    if (uniqueCities.length > 0) {
-      await client.query(`
+    // Find cities that already exist (any casing)
+    const existingCitiesRes = await client.query(
+      "SELECT id, name FROM cities WHERE LOWER(name) = ANY($1)", 
+      [cityNamesLower]
+    );
+    
+    const cityIdMap = new Map<string, number>();
+    existingCitiesRes.rows.forEach(r => cityIdMap.set(r.name.toLowerCase(), r.id));
+    
+    // Identify cities that need to be created
+    const citiesToCreate = cityNamesRaw.filter(name => !cityIdMap.has(name.toLowerCase()));
+    
+    if (citiesToCreate.length > 0) {
+      // Insert new cities (normalizing to Uppercase for consistency)
+      const insertCitiesRes = await client.query(`
         INSERT INTO cities (name)
-        SELECT DISTINCT name FROM UNNEST($1::text[]) as name
+        SELECT DISTINCT UPPER(name) FROM UNNEST($1::text[]) as name
         ON CONFLICT (name) DO NOTHING
-      `, [uniqueCities]);
+        RETURNING id, name
+      `, [citiesToCreate]);
+      
+      insertCitiesRes.rows.forEach(r => cityIdMap.set(r.name.toLowerCase(), r.id));
     }
-    
-    // Get all relevant city IDs in one go
-    const cityMapRes = await client.query("SELECT id, name FROM cities WHERE name = ANY($1)", [uniqueCities]);
-    const cityIdMap = new Map(cityMapRes.rows.map(r => [r.name.toLowerCase(), r.id]));
     
     // 2. Prepare CTO data
     const ctoData: any[][] = rows.map(row => {
-      const cityName = row.cidade.replace(/\s*\(Imp\.\)$/i, '').trim().toLowerCase();
-      const cityId = cityIdMap.get(cityName);
+      const cityNameClean = row.cidade.replace(/\s*\(Imp\.\)$/i, '').trim().toLowerCase();
+      const cityId = cityIdMap.get(cityNameClean);
       
       let ctoName = row.sigla && row.sigla !== '**' ? row.sigla : row.sigla_poste;
       ctoName = ctoName?.trim() || 'Sem Nome';
