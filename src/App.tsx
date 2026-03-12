@@ -1448,7 +1448,7 @@ function CTODetail() {
 
 function Layout() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<(Client & { cto_name: string; city_name: string })[]>([]);
+  const [searchResults, setSearchResults] = useState<(any & { type: 'client' | 'cto'; cto_name: string; city_name: string })[]>([]);
   const [showResults, setShowResults] = useState(false);
   const navigate = useNavigate();
 
@@ -1513,7 +1513,7 @@ function Layout() {
                     </div>
                     {searchResults.map((result) => (
                       <button
-                        key={result.id}
+                        key={`${result.type}-${result.id}`}
                         className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100 last:border-0 transition-colors"
                         onClick={() => {
                           navigate(`/cto/${result.cto_id}`);
@@ -1522,11 +1522,26 @@ function Layout() {
                         }}
                       >
                         <div className="flex justify-between items-start">
-                          <span className="font-medium text-slate-900">{result.name}</span>
-                          <Badge status={result.status} />
+                          <div className="flex items-center gap-2">
+                            {result.type === 'cto' ? (
+                              <Server className="w-4 h-4 text-indigo-500" />
+                            ) : (
+                              <Users className="w-4 h-4 text-slate-400" />
+                            )}
+                            <span className="font-medium text-slate-900">{result.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                             <span className={cn(
+                               "text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider",
+                               result.type === 'cto' ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-600"
+                             )}>
+                               {result.type === 'cto' ? 'CTO' : 'Cliente'}
+                             </span>
+                             {result.type === 'client' && <Badge status={result.status} />}
+                          </div>
                         </div>
                         <div className="text-xs text-slate-500 mt-1">
-                          {result.city_name} • {result.cto_name} • Porta {result.port_number}
+                          {result.city_name} {result.type === 'client' && `• ${result.cto_name}`} {result.port_number > 0 && `• Porta ${result.port_number}`}
                         </div>
                         {result.pppoe && (
                           <div className="text-xs text-indigo-600 mt-0.5 font-mono">
@@ -1542,7 +1557,7 @@ function Layout() {
                 )}
                 {showResults && searchQuery.length >= 2 && searchResults.length === 0 && (
                   <div className="absolute mt-1 w-full bg-white shadow-lg rounded-lg border border-slate-200 py-4 px-4 text-center text-sm text-slate-500 z-50">
-                    Nenhum cliente encontrado.
+                    Nenhum resultado encontrado.
                   </div>
                 )}
               </div>

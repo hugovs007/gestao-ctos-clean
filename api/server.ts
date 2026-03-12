@@ -358,21 +358,39 @@ app.post("/api/import", async (req, res) => {
 // Search
 app.get("/api/search", async (req, res) => {
   try {
-    const query = req.query.q as string;
-    if (!query || query.length < 2) return res.json([]);
+    const q = req.query.q as string;
+    if (!q || q.length < 2) return res.json([]);
+    const pattern = `%${q}%`;
 
     const result = await pool.query(`
-      SELECT c.*, cto.name as cto_name, city.name as city_name 
-      FROM clients c
-      JOIN ctos cto ON c.cto_id = cto.id
-      JOIN cities city ON c.city_id = city.id
-      WHERE c.name ILIKE $1 OR c.address ILIKE $2 OR c.pppoe ILIKE $3 OR cto.name ILIKE $4
+      (
+        SELECT 
+          'client' as type,
+          c.id, c.name, c.status, c.port_number, c.pppoe, c.address,
+          cto.id as cto_id, cto.name as cto_name, 
+          city.name as city_name
+        FROM clients c
+        JOIN ctos cto ON c.cto_id = cto.id
+        JOIN cities city ON c.city_id = city.id
+        WHERE c.name ILIKE $1 OR c.address ILIKE $1 OR c.pppoe ILIKE $1 OR cto.name ILIKE $1
+      )
+      UNION ALL
+      (
+        SELECT 
+          'cto' as type,
+          cto.id as id, cto.name as name, 'active' as status, 0 as port_number, '' as pppoe, cto.address as address,
+          cto.id as cto_id, cto.name as cto_name,
+          city.name as city_name
+        FROM ctos cto
+        JOIN cities city ON cto.city_id = city.id
+        WHERE cto.name ILIKE $1 OR cto.address ILIKE $1
+      )
       LIMIT 50
-    `, [`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`]);
+    `, [pattern]);
     
     res.json(result.rows);
   } catch (error: any) {
-    console.error("Error searching clients:", error);
+    console.error("Error searching:", error);
     res.status(500).json({ error: error.message });
   }
 });
