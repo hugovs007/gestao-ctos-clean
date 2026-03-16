@@ -34,7 +34,15 @@ function Tabs({ tabs, activeTab, onChange }: { tabs: { id: string; label: string
   );
 }
 
-function Button({ className, variant = 'primary', ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'danger' | 'ghost' }) {
+function Button({ 
+  className, 
+  variant = 'primary', 
+  size = 'md',
+  ...props 
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { 
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost',
+  size?: 'sm' | 'md' | 'lg'
+}) {
   const variants = {
     primary: 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm',
     secondary: 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 shadow-sm',
@@ -42,11 +50,18 @@ function Button({ className, variant = 'primary', ...props }: React.ButtonHTMLAt
     ghost: 'text-slate-600 hover:bg-slate-100',
   };
 
+  const sizes = {
+    sm: 'px-2 py-1 text-xs',
+    md: 'px-4 py-2 text-sm',
+    lg: 'px-6 py-3 text-base',
+  };
+
   return (
     <button
       className={cn(
-        'inline-flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed',
+        'inline-flex items-center justify-center rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed',
         variants[variant],
+        sizes[size],
         className
       )}
       {...props}
@@ -1663,7 +1678,23 @@ function ViabilityCheck() {
                   placeholder="Ex: Rua Pedro Velho ou -6.8893, -36.9112"
                   className="w-full pl-10 pr-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-medium text-lg bg-indigo-50/30"
                   value={address}
-                  onChange={(e) => setAddress(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setAddress(val);
+                    // If user is typing something that looks like a full address or coordinate,
+                    // or just changing text, we should clear the structured fields 
+                    // to prevent old city data from biasing the search.
+                    if (val.trim() !== '') {
+                      setStructured({
+                        street: '',
+                        number: '',
+                        neighborhood: '',
+                        city: '',
+                        state: '',
+                        zipCode: ''
+                      });
+                    }
+                  }}
                 />
               </div>
               <Button type="button" variant="secondary" onClick={handleGetCurrentLocation} className="h-[52px] w-[52px]" title="Minha localização atual">
@@ -1679,6 +1710,19 @@ function ViabilityCheck() {
                  <Filter className="w-4 h-4 text-indigo-500" />
                  Detalhamento do Endereço
               </div>
+              <Button 
+                type="button" 
+                variant="ghost" 
+                size="sm" 
+                className="h-7 text-[10px] uppercase tracking-tighter"
+                onClick={() => {
+                  setStructured({ street: '', number: '', neighborhood: '', city: '', state: '', zipCode: '' });
+                  setAddress('');
+                  setGeocodedAddress(null);
+                }}
+              >
+                Limpar Detalhes
+              </Button>
               <button 
                 type="button"
                 onClick={handleFillFromAddress}

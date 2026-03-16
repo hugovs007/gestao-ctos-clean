@@ -429,12 +429,20 @@ async function geocodeAddress(q: string, street?: string, city?: string, state?:
   try {
     if (googleKey) {
       let url = `https://maps.googleapis.com/maps/api/geocode/json?key=${googleKey}&language=pt-BR`;
-      if (street || city || state) {
-        let addressStr = [street, city, state].filter(Boolean).join(', ');
-        url += `&address=${encodeURIComponent(addressStr)}`;
+      
+      let addressParts = [];
+      if (street) addressParts.push(street);
+      if (city) addressParts.push(city);
+      if (state) addressParts.push(state);
+      
+      let finalAddress = "";
+      if (addressParts.length > 0) {
+        finalAddress = q ? `${q}, ${addressParts.join(', ')}` : addressParts.join(', ');
       } else {
-        url += `&address=${encodeURIComponent(q)}`;
+        finalAddress = q;
       }
+
+      url += `&address=${encodeURIComponent(finalAddress)}`;
       const response = await fetch(url);
       const data = await response.json() as any;
       if (data.status === 'OK' && data.results.length > 0) {
@@ -461,10 +469,15 @@ async function geocodeAddress(q: string, street?: string, city?: string, state?:
     }
 
     let url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&countrycodes=br`;
-    if (street || city || state) {
+    
+    // If q looks like a full address (contains a comma), prioritize q as a general search
+    if (q && (q.includes(',') || q.split(' ').length > 4)) {
+      url += `&q=${encodeURIComponent(q)}`;
+    } else if (street || city || state) {
       if (street) url += `&street=${encodeURIComponent(street)}`;
       if (city) url += `&city=${encodeURIComponent(city)}`;
       if (state) url += `&state=${encodeURIComponent(state)}`;
+      if (q) url += `&q=${encodeURIComponent(q)}`; // Append q as extra context if small
     } else {
       url += `&q=${encodeURIComponent(q)}`;
     }
