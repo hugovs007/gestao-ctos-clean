@@ -417,15 +417,23 @@ app.get("/api/viability", async (req, res) => {
 
 // Geocoding
 app.get("/api/geocode", async (req, res) => {
-  const { q } = req.query;
-  if (!q) return res.status(400).json({ error: "Endereço é obrigatório" });
-
+  const { q, street, city, state } = req.query;
+  
   const googleKey = process.env.GOOGLE_MAPS_API_KEY;
 
   try {
     if (googleKey) {
       // Use Google Maps Geocoding
-      const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(q as string)}&key=${googleKey}&language=pt-BR`);
+      let url = `https://maps.googleapis.com/maps/api/geocode/json?key=${googleKey}&language=pt-BR`;
+      
+      if (street || city || state) {
+        let addressStr = [street, city, state].filter(Boolean).join(', ');
+        url += `&address=${encodeURIComponent(addressStr)}`;
+      } else {
+        url += `&address=${encodeURIComponent(q as string)}`;
+      }
+
+      const response = await fetch(url);
       const data = await response.json() as any;
 
       if (data.status === 'OK' && data.results.length > 0) {
@@ -451,11 +459,20 @@ app.get("/api/geocode", async (req, res) => {
           }
         });
       }
-      // If Google fails for some reason (invalid key, etc.), it will fall through to Nominatim
     }
 
     // Fallback or Default: Nominatim (OpenStreetMap)
-    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q as string)}&limit=1&addressdetails=1&countrycodes=br`, {
+    let url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&countrycodes=br`;
+    
+    if (street || city || state) {
+      if (street) url += `&street=${encodeURIComponent(street as string)}`;
+      if (city) url += `&city=${encodeURIComponent(city as string)}`;
+      if (state) url += `&state=${encodeURIComponent(state as string)}`;
+    } else {
+      url += `&q=${encodeURIComponent(q as string)}`;
+    }
+
+    const response = await fetch(url, {
       headers: {
         'User-Agent': 'GestaoCTOs/1.0'
       }

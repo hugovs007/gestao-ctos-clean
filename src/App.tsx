@@ -1458,6 +1458,7 @@ function ViabilityCheck() {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<(any & { distance: number })[]>([]);
   const [searched, setSearched] = useState(false);
+  const [geocodedAddress, setGeocodedAddress] = useState<string | null>(null);
 
   // Build query from structured fields to keep main search bar synchronized
   const updateMainAddress = (newStructured: typeof structured) => {
@@ -1492,12 +1493,22 @@ function ViabilityCheck() {
       if (coordsMatch) {
         lat = parseFloat(coordsMatch[1]);
         lng = parseFloat(coordsMatch[2]);
+        setGeocodedAddress("Coordenadas inseridas");
       } else {
-        const geoRes = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
+        // Prepare structured params
+        const params = new URLSearchParams();
+        params.append('q', query);
+        if (structured.street) params.append('street', structured.street);
+        if (structured.city) params.append('city', structured.city);
+        if (structured.state) params.append('state', structured.state);
+
+        const geoRes = await fetch(`/api/geocode?${params.toString()}`);
         if (geoRes.ok) {
           const geoData = await geoRes.json();
           lat = geoData.lat;
           lng = geoData.lng;
+          setGeocodedAddress(geoData.display_name || "Localização encontrada");
+          
           if (geoData.details) {
             setStructured(prev => ({
               street: prev.street || geoData.details.road || '',
@@ -1565,6 +1576,7 @@ function ViabilityCheck() {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
         setAddress(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+        setGeocodedAddress("Sua localização atual");
         
         try {
           const res = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`);
@@ -1773,10 +1785,18 @@ function ViabilityCheck() {
 
       {searched && (
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-            <Filter className="w-5 h-5 text-indigo-500" />
-            Resultados da Busca
-          </h3>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-100 pb-2">
+            <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+              <Filter className="w-5 h-5 text-indigo-500" />
+              Resultados da Busca
+            </h3>
+            {geocodedAddress && (
+              <div className="text-xs font-medium text-slate-500 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100 flex items-center gap-1.5 animate-in fade-in zoom-in duration-300">
+                <MapPin className="w-3 h-3 text-indigo-400" />
+                Buscando em: <span className="text-slate-900 font-bold">{geocodedAddress}</span>
+              </div>
+            )}
+          </div>
 
           {loading ? (
             <div className="text-center py-12 text-slate-500">Buscando CTOs próximas...</div>
