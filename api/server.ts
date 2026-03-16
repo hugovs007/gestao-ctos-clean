@@ -537,8 +537,9 @@ app.get("/api/viability", async (req, res) => {
   try {
     // If city_name is provided but no city_id, try to find the city
     if (!targetCityId && city_name) {
+      // Try exact match first, then partial match
       const cityRes = await pool.query(
-        "SELECT id FROM cities WHERE name ILIKE $1",
+        "SELECT id FROM cities WHERE $1 ILIKE '%' || name || '%' OR name ILIKE '%' || $1 || '%'",
         [city_name as string]
       );
       if (cityRes.rows.length > 0) {

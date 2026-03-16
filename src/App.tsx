@@ -1965,104 +1965,107 @@ function ViabilityCheck() {
           {loading ? (
             <div className="text-center py-12 text-slate-500">Buscando CTOs próximas...</div>
           ) : (
-           searchDiag?.currentCity && (
-            <div className="mb-4 p-2 bg-indigo-50 border border-indigo-100 rounded-lg flex items-center gap-2">
-              <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Cerca de:</span>
-              <span className="text-sm font-medium text-indigo-900">{searchDiag.currentCity}</span>
-            </div>
-          ))}
-
-          {results.length === 0 ? (
-            <Card className="p-12 text-center bg-slate-50 border-dashed border-2">
-              <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-4" />
-              <h4 className="text-lg font-bold text-slate-900 mb-2">Sem cobertura identificada</h4>
-              <p className="text-slate-600 max-w-md mx-auto mb-6">
-                Não encontramos CTOs com portas disponíveis dentro do raio de {radius}m nestas coordenadas.
-              </p>
-              
-              <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 text-left max-w-lg mx-auto">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600">
-                    <RefreshCw className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-bold text-indigo-900 mb-1">Diagnóstico do Banco de Dados</p>
-                    <div className="space-y-1.5 mt-2">
-                       {searchDiag && searchDiag.stats && (
-                         <>
-                           <div className="flex justify-between text-xs">
-                             <span className="text-indigo-700">Total de CTOs cadastradas:</span>
-                             <span className="font-bold text-indigo-900">{searchDiag.stats.total_ctos}</span>
-                           </div>
-                           <div className="flex justify-between text-xs">
-                             <span className="text-indigo-700">CTOs com GPS (visíveis na busca):</span>
-                             <span className="font-bold text-indigo-900">{searchDiag.stats.ctos_with_gps}</span>
-                           </div>
-                           <div className="flex justify-between text-xs border-t border-indigo-100 pt-1 mt-1">
-                             <span className="text-indigo-700">CTO mais próxima encontrada:</span>
-                             <span className="font-bold text-indigo-900">
-                               {searchDiag.closest ? `${(searchDiag.closest.distance * 1000).toFixed(0)}m` : 'Nenhuma'}
-                             </span>
-                           </div>
-                           {searchDiag.closest && (
-                             <p className="text-[10px] text-indigo-600 italic mt-1">
-                               * A CTO "{searchDiag.closest.name}" está fora do raio de {radius}m.
-                             </p>
-                           )}
-                         </>
-                       )}
-                       {!searchDiag && <p className="text-xs text-indigo-800">Carregando informações...</p>}
-                    </div>
-                  </div>
+            <div className="space-y-4">
+              {searchDiag?.currentCity && (
+                <div className="mb-4 p-2 bg-indigo-50 border border-indigo-100 rounded-lg flex items-center gap-2">
+                  <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Cerca de:</span>
+                  <span className="text-sm font-medium text-indigo-900">{searchDiag.currentCity}</span>
                 </div>
-              </div>
+              )}
 
-              <div className="mt-8 flex justify-center gap-3">
-                <p className="text-sm text-slate-500">Tente aumentar o raio de busca ou verificar o endereço.</p>
-              </div>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 gap-4">
-              {results.map((cto) => {
-                const availablePorts = cto.total_ports - (cto.used_ports || 0);
-                const isFull = availablePorts <= 0;
-
-                return (
-                  <Card key={cto.id} className={cn("transition-all", isFull ? "opacity-60 bg-slate-50/50" : "hover:shadow-md border-l-4 border-l-indigo-500")}>
-                    <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div className="flex items-start gap-4">
-                        <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center shrink-0", isFull ? "bg-slate-200 text-slate-500" : "bg-indigo-100 text-indigo-600")}>
-                          <Server className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-lg text-slate-900">{cto.name}</h4>
-                          <p className="text-sm text-slate-500 flex items-center gap-1">
-                            <Navigation className="w-3 h-3" />
-                            {Math.round(cto.distance * 1000)}m de distância
-                          </p>
-                          <AddressDisplay address={cto.address} className="text-xs mt-1" />
-                        </div>
+              {results.length === 0 ? (
+                <Card className="p-12 text-center bg-slate-50 border-dashed border-2">
+                  <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-4" />
+                  <h4 className="text-lg font-bold text-slate-900 mb-2">Sem cobertura identificada</h4>
+                  <p className="text-slate-600 max-w-md mx-auto mb-6">
+                    Não encontramos CTOs com portas disponíveis dentro do raio de {radius}m nestas coordenadas.
+                  </p>
+                  
+                  <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 text-left max-w-lg mx-auto">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600">
+                        <RefreshCw className="w-5 h-5" />
                       </div>
-
-                      <div className="flex flex-row md:flex-col items-center md:items-end gap-4 md:gap-1">
-                        <div className="text-right">
-                          <div className={cn("text-lg font-bold", isFull ? "text-red-600" : "text-emerald-600")}>
-                            {availablePorts} / {cto.total_ports}
-                          </div>
-                          <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Portas Livres</div>
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-indigo-900 mb-1">Diagnóstico do Banco de Dados</p>
+                        <div className="space-y-1.5 mt-2">
+                           {searchDiag && searchDiag.stats && (
+                             <>
+                               <div className="flex justify-between text-xs">
+                                 <span className="text-indigo-700">Total de CTOs cadastradas:</span>
+                                 <span className="font-bold text-indigo-900">{searchDiag.stats.total_ctos}</span>
+                               </div>
+                               <div className="flex justify-between text-xs">
+                                 <span className="text-indigo-700">CTOs com GPS (visíveis na busca):</span>
+                                 <span className="font-bold text-indigo-900">{searchDiag.stats.ctos_with_gps}</span>
+                               </div>
+                               <div className="flex justify-between text-xs border-t border-indigo-100 pt-1 mt-1">
+                                 <span className="text-indigo-700">CTO mais próxima encontrada:</span>
+                                 <span className="font-bold text-indigo-900">
+                                   {searchDiag.closest ? `${(searchDiag.closest.distance * 1000).toFixed(0)}m` : 'Nenhuma'}
+                                 </span>
+                               </div>
+                               {searchDiag.closest && (
+                                 <p className="text-[10px] text-indigo-600 italic mt-1">
+                                   * A CTO "{searchDiag.closest.name}" está fora do raio de {radius}m.
+                                 </p>
+                               )}
+                             </>
+                           )}
+                           {!searchDiag && <p className="text-xs text-indigo-800">Carregando informações...</p>}
                         </div>
-                        {!isFull && (
-                          <Link to={`/cto/${cto.id}`}>
-                            <Button variant="ghost" className="text-indigo-600 hover:text-indigo-700 p-0 h-auto font-bold text-xs uppercase flex items-center gap-1">
-                              Gerenciar <ArrowLeft className="w-3 h-3 rotate-180" />
-                            </Button>
-                          </Link>
-                        )}
                       </div>
                     </div>
-                  </Card>
-                );
-              })}
+                  </div>
+
+                  <div className="mt-8 flex justify-center gap-3">
+                    <p className="text-sm text-slate-500">Tente aumentar o raio de busca ou verificar o endereço.</p>
+                  </div>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 gap-4">
+                  {results.map((cto) => {
+                    const availablePorts = cto.total_ports - (cto.used_ports || 0);
+                    const isFull = availablePorts <= 0;
+
+                    return (
+                      <Card key={cto.id} className={cn("transition-all", isFull ? "opacity-60 bg-slate-50/50" : "hover:shadow-md border-l-4 border-l-indigo-500")}>
+                        <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                          <div className="flex items-start gap-4">
+                            <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center shrink-0", isFull ? "bg-slate-200 text-slate-500" : "bg-indigo-100 text-indigo-600")}>
+                              <Server className="w-6 h-6" />
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-lg text-slate-900">{cto.name}</h4>
+                              <p className="text-sm text-slate-500 flex items-center gap-1">
+                                <Navigation className="w-3 h-3" />
+                                {Math.round(cto.distance * 1000)}m de distância
+                              </p>
+                              <AddressDisplay address={cto.address} className="text-xs mt-1" />
+                            </div>
+                          </div>
+
+                          <div className="flex flex-row md:flex-col items-center md:items-end gap-4 md:gap-1">
+                            <div className="text-right">
+                              <div className={cn("text-lg font-bold", isFull ? "text-red-600" : "text-emerald-600")}>
+                                {availablePorts} / {cto.total_ports}
+                              </div>
+                              <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Portas Livres</div>
+                            </div>
+                            {!isFull && (
+                              <Link to={`/cto/${cto.id}`}>
+                                <Button variant="ghost" className="text-indigo-600 hover:text-indigo-700 p-0 h-auto font-bold text-xs uppercase flex items-center gap-1">
+                                  Gerenciar <ArrowLeft className="w-3 h-3 rotate-180" />
+                                </Button>
+                              </Link>
+                            )}
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
