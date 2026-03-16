@@ -163,8 +163,18 @@ app.get("/api/cities/:cityId/ctos", async (req, res) => {
 });
 
 app.post("/api/ctos", async (req, res) => {
-  const { name, city_id, total_ports, address, latitude, longitude } = req.body;
+  let { name, city_id, total_ports, address, latitude, longitude } = req.body;
+  
   try {
+    // Auto-geocode if coordinates are missing but address is present
+    if ((latitude === null || longitude === null || latitude === undefined || longitude === undefined) && address) {
+      const geo = await geocodeAddress(address);
+      if (geo) {
+        latitude = geo.lat;
+        longitude = geo.lng;
+      }
+    }
+
     const result = await pool.query(
       "INSERT INTO ctos (name, city_id, total_ports, address, latitude, longitude) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
       [name, city_id, total_ports || 16, address, latitude || null, longitude || null]
@@ -172,6 +182,31 @@ app.post("/api/ctos", async (req, res) => {
     res.json({ id: result.rows[0].id, name, city_id, total_ports, address, latitude, longitude });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
+  }
+});
+
+app.get("/api/ctos/sync-coords", async (req, res) => {
+  try {
+    const ctisRes = await pool.query("SELECT id, name, address FROM ctos WHERE latitude IS NULL OR longitude IS NULL");
+    const count = ctisRes.rowCount || 0;
+    let fixed = 0;
+
+    for (const cto of ctisRes.rows) {
+      if (cto.address) {
+        const geo = await geocodeAddress(cto.address);
+        if (geo) {
+          await pool.query(
+            "UPDATE ctos SET latitude = $1, longitude = $2 WHERE id = $3",
+            [geo.lat, geo.lng, cto.id]
+          );
+          fixed++;
+        }
+      }
+    }
+    res.json({ total: count, fixed });
+  } catch (error: any) {
+    console.error("Sync error:", error);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -191,13 +226,22 @@ app.get("/api/ctos/:id", async (req, res) => {
 });
 
 app.put("/api/ctos/:id", async (req, res) => {
-  const { name, address, total_ports, latitude, longitude } = req.body;
+  let { name, address, total_ports, latitude, longitude } = req.body;
   try {
+    // Auto-geocode if coordinates are missing but address is changed or missing coords
+    if ((latitude === null || longitude === null || latitude === undefined || longitude === undefined) && address) {
+      const geo = await geocodeAddress(address);
+      if (geo) {
+        latitude = geo.lat;
+        longitude = geo.lng;
+      }
+    }
+
     await pool.query(
       "UPDATE ctos SET name = $1, address = $2, total_ports = $3, latitude = $4, longitude = $5 WHERE id = $6",
       [name, address, total_ports, latitude || null, longitude || null, req.params.id]
     );
-    res.json({ success: true });
+    res.json({ success: true, latitude, longitude });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }
@@ -365,6 +409,76 @@ app.post("/api/import", async (req, res) => {
   }
 });
 
+// Helper Geocoding Function
+async function geocodeAddress(q: string, street?: string, city?: string, state?: string) {
+  const googleKey = process.env.GOOGLE_MAPS_API_KEY;
+
+  try {
+    if (googleKey) {
+      let url = `https://maps.googleapis.com/maps/api/geocode/json?key=${googleKey}&language=pt-BR`;
+      if (street || city || state) {
+        let addressStr = [street, city, state].filter(Boolean).join(', ');
+        url += `&address=${encodeURIComponent(addressStr)}`;
+      } else {
+        url += `&address=${encodeURIComponent(q)}`;
+      }
+      const response = await fetch(url);
+      const data = await response.json() as any;
+      if (data.status === 'OK' && data.results.length > 0) {
+        const result = data.results[0];
+        const components = result.address_components;
+        const getComponent = (type: string) => {
+          const comp = components.find((c: any) => c.types.includes(type));
+          return comp ? comp.long_name : '';
+        };
+        return {
+          lat: result.geometry.location.lat,
+          lng: result.geometry.location.lng,
+          display_name: result.formatted_address,
+          details: {
+            road: getComponent('route'),
+            house_number: getComponent('street_number'),
+            suburb: getComponent('sublocality_level_1') || getComponent('neighborhood'),
+            city: getComponent('administrative_area_level_2') || getComponent('locality'),
+            state: getComponent('administrative_area_level_1'),
+            postcode: getComponent('postal_code')
+          }
+        };
+      }
+    }
+
+    let url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&countrycodes=br`;
+    if (street || city || state) {
+      if (street) url += `&street=${encodeURIComponent(street)}`;
+      if (city) url += `&city=${encodeURIComponent(city)}`;
+      if (state) url += `&state=${encodeURIComponent(state)}`;
+    } else {
+      url += `&q=${encodeURIComponent(q)}`;
+    }
+    const response = await fetch(url, { headers: { 'User-Agent': 'GestaoCTOs/1.0' } });
+    const data = await response.json() as any[];
+    if (data && data.length > 0) {
+      const address = data[0].address || {};
+      return {
+        lat: parseFloat(data[0].lat),
+        lng: parseFloat(data[0].lon),
+        display_name: data[0].display_name,
+        details: {
+          road: address.road || '',
+          house_number: address.house_number || '',
+          suburb: address.suburb || address.neighbourhood || '',
+          city: address.city || address.town || address.village || '',
+          state: address.state || '',
+          postcode: address.postcode || ''
+        }
+      };
+    }
+  } catch (error) {
+    console.error("Internal geocoding error:", error);
+  }
+  return null;
+}
+
 // Viability Check
 app.get("/api/viability", async (req, res) => {
   const { lat, lng, radius } = req.query;
@@ -418,82 +532,10 @@ app.get("/api/viability", async (req, res) => {
 // Geocoding
 app.get("/api/geocode", async (req, res) => {
   const { q, street, city, state } = req.query;
-  
-  const googleKey = process.env.GOOGLE_MAPS_API_KEY;
-
   try {
-    if (googleKey) {
-      // Use Google Maps Geocoding
-      let url = `https://maps.googleapis.com/maps/api/geocode/json?key=${googleKey}&language=pt-BR`;
-      
-      if (street || city || state) {
-        let addressStr = [street, city, state].filter(Boolean).join(', ');
-        url += `&address=${encodeURIComponent(addressStr)}`;
-      } else {
-        url += `&address=${encodeURIComponent(q as string)}`;
-      }
-
-      const response = await fetch(url);
-      const data = await response.json() as any;
-
-      if (data.status === 'OK' && data.results.length > 0) {
-        const result = data.results[0];
-        const components = result.address_components;
-        
-        const getComponent = (type: string) => {
-          const comp = components.find((c: any) => c.types.includes(type));
-          return comp ? comp.long_name : '';
-        };
-
-        return res.json({
-          lat: result.geometry.location.lat,
-          lng: result.geometry.location.lng,
-          display_name: result.formatted_address,
-          details: {
-            road: getComponent('route'),
-            house_number: getComponent('street_number'),
-            suburb: getComponent('sublocality_level_1') || getComponent('neighborhood'),
-            city: getComponent('administrative_area_level_2') || getComponent('locality'),
-            state: getComponent('administrative_area_level_1'),
-            postcode: getComponent('postal_code')
-          }
-        });
-      }
-    }
-
-    // Fallback or Default: Nominatim (OpenStreetMap)
-    let url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&countrycodes=br`;
-    
-    if (street || city || state) {
-      if (street) url += `&street=${encodeURIComponent(street as string)}`;
-      if (city) url += `&city=${encodeURIComponent(city as string)}`;
-      if (state) url += `&state=${encodeURIComponent(state as string)}`;
-    } else {
-      url += `&q=${encodeURIComponent(q as string)}`;
-    }
-
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'GestaoCTOs/1.0'
-      }
-    });
-    const data = await response.json() as any[];
-    
-    if (data && data.length > 0) {
-      const address = data[0].address || {};
-      res.json({
-        lat: parseFloat(data[0].lat),
-        lng: parseFloat(data[0].lon),
-        display_name: data[0].display_name,
-        details: {
-          road: address.road || '',
-          house_number: address.house_number || '',
-          suburb: address.suburb || address.neighbourhood || '',
-          city: address.city || address.town || address.village || '',
-          state: address.state || '',
-          postcode: address.postcode || ''
-        }
-      });
+    const result = await geocodeAddress(q as string, street as string, city as string, state as string);
+    if (result) {
+      res.json(result);
     } else {
       res.status(404).json({ error: "Endereço não encontrado" });
     }

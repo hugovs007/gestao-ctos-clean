@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Plus, Server, MapPin, Users, Search, ArrowLeft, Trash2, Edit2, CheckCircle, XCircle, ExternalLink, AlertTriangle, ChevronDown, Navigation, Locate, Filter, Map } from 'lucide-react';
+import { Plus, Server, MapPin, Users, Search, ArrowLeft, Trash2, Edit2, CheckCircle, XCircle, ExternalLink, AlertTriangle, ChevronDown, Navigation, Locate, Filter, Map, RefreshCw } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { Unit, City, CTO, Client } from './types.js';
@@ -791,6 +791,19 @@ function CityView() {
     setEditForm({ name: cto.name, address: cto.address || '', total_ports: cto.total_ports });
   };
 
+  const handleSyncCoords = async () => {
+    if (!confirm('Deseja buscar coordenadas para todas as CTOs desta cidade que estão sem localização?')) return;
+    try {
+      const res = await fetch('/api/ctos/sync-coords');
+      const data = await res.json();
+      alert(`Sincronização concluída! Total corrigido: ${data.fixed} de ${data.total} CTOs.`);
+      fetchCTOs();
+    } catch (err) {
+      console.error('Failed to sync coords', err);
+      alert('Erro ao sincronizar coordenadas.');
+    }
+  };
+
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCTO) return;
@@ -813,23 +826,33 @@ function CityView() {
         <Button variant="ghost" onClick={() => navigate('/')} className="!p-2">
           <ArrowLeft className="w-5 h-5" />
         </Button>
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-900">{cityName || 'Cidade'}</h1>
-            {unitName && (
-              <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-xs font-semibold rounded-full border border-indigo-100">
-                {unitName}
-              </span>
-            )}
-            <button 
-              onClick={() => setIsEditingCity(true)}
-              className="p-1 text-slate-400 hover:text-indigo-600 transition-colors"
-              title="Editar Cidade"
-            >
-              <Edit2 className="w-4 h-4" />
-            </button>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-slate-900">{cityName || 'Cidade'}</h1>
+              {unitName && (
+                <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-xs font-semibold rounded-full border border-indigo-100">
+                  {unitName}
+                </span>
+              )}
+              <button 
+                onClick={() => setIsEditingCity(true)}
+                className="p-1 text-slate-400 hover:text-indigo-600 transition-colors"
+                title="Editar Cidade"
+              >
+                <Edit2 className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-slate-500">Gerencie as CTOs desta cidade.</p>
           </div>
-          <p className="text-slate-500">Gerencie as CTOs desta cidade.</p>
+          <Button 
+            variant="secondary" 
+            onClick={handleSyncCoords} 
+            className="flex items-center gap-2 text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Sincronizar Coordenadas
+          </Button>
         </div>
       </div>
 
@@ -1812,10 +1835,30 @@ function ViabilityCheck() {
           {loading ? (
             <div className="text-center py-12 text-slate-500">Buscando CTOs próximas...</div>
           ) : results.length === 0 ? (
-            <Card className="p-12 text-center text-slate-500 bg-slate-50 border-dashed">
-              <AlertTriangle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p>Nenhuma CTO encontrada neste raio com portas disponíveis.</p>
-              <p className="text-sm mt-1">Tente aumentar o raio de busca.</p>
+            <Card className="p-12 text-center bg-slate-50 border-dashed border-2">
+              <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-4" />
+              <h4 className="text-lg font-bold text-slate-900 mb-2">Sem cobertura identificada</h4>
+              <p className="text-slate-600 max-w-md mx-auto mb-6">
+                Não encontramos CTOs com portas disponíveis dentro do raio de {radius}m nestas coordenadas.
+              </p>
+              
+              <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 text-left max-w-lg mx-auto">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600">
+                    <RefreshCw className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-indigo-900 mb-1">Dica de Diagnóstico</p>
+                    <p className="text-xs text-indigo-800 leading-relaxed">
+                      Se você sabe que existem CTOs nesta cidade, verifique se elas possuem **coordenadas geográficas** (Latitude/Longitude) cadastradas. Caso contrário, elas não aparecerão na busca de viabilidade.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 flex justify-center gap-3">
+                <p className="text-sm text-slate-500">Tente aumentar o raio de busca ou verificar o endereço.</p>
+              </div>
             </Card>
           ) : (
             <div className="grid grid-cols-1 gap-4">
