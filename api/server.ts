@@ -420,8 +420,42 @@ app.get("/api/geocode", async (req, res) => {
   const { q } = req.query;
   if (!q) return res.status(400).json({ error: "Endereço é obrigatório" });
 
+  const googleKey = process.env.GOOGLE_MAPS_API_KEY;
+
   try {
-    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q as string)}&limit=1`, {
+    if (googleKey) {
+      // Use Google Maps Geocoding
+      const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(q as string)}&key=${googleKey}&language=pt-BR`);
+      const data = await response.json() as any;
+
+      if (data.status === 'OK' && data.results.length > 0) {
+        const result = data.results[0];
+        const components = result.address_components;
+        
+        const getComponent = (type: string) => {
+          const comp = components.find((c: any) => c.types.includes(type));
+          return comp ? comp.long_name : '';
+        };
+
+        return res.json({
+          lat: result.geometry.location.lat,
+          lng: result.geometry.location.lng,
+          display_name: result.formatted_address,
+          details: {
+            road: getComponent('route'),
+            house_number: getComponent('street_number'),
+            suburb: getComponent('sublocality_level_1') || getComponent('neighborhood'),
+            city: getComponent('administrative_area_level_2') || getComponent('locality'),
+            state: getComponent('administrative_area_level_1'),
+            postcode: getComponent('postal_code')
+          }
+        });
+      }
+      // If Google fails for some reason (invalid key, etc.), it will fall through to Nominatim
+    }
+
+    // Fallback or Default: Nominatim (OpenStreetMap)
+    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q as string)}&limit=1&addressdetails=1&countrycodes=br`, {
       headers: {
         'User-Agent': 'GestaoCTOs/1.0'
       }
