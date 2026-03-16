@@ -23,18 +23,26 @@ app.get("/api/cities", async (req, res) => {
 
 app.get("/api/stats", async (req, res) => {
   try {
-    const [unitsCountRes, citiesCountRes, ctosCountRes, clientsCountRes] = await Promise.all([
+    const [unitsCountRes, citiesCountRes, ctosCountRes, clientsCountRes, unitsDetailRes, citiesDetailRes, ctosDetailRes, clientsStatusRes] = await Promise.all([
       pool.query("SELECT COUNT(*) AS count FROM units"),
       pool.query("SELECT COUNT(*) AS count FROM cities"),
       pool.query("SELECT COUNT(*) AS count FROM ctos"),
-      pool.query("SELECT COUNT(*) AS count FROM clients")
+      pool.query("SELECT COUNT(*) AS count FROM clients"),
+      pool.query(`SELECT u.id, u.name, COUNT(c.id) AS city_count FROM units u LEFT JOIN cities c ON c.unit_id = u.id GROUP BY u.id ORDER BY u.name`),
+      pool.query(`SELECT c.id, c.name, COALESCE(cto_count.count, 0) AS cto_count FROM cities c LEFT JOIN (SELECT city_id, COUNT(*) AS cto_count FROM ctos GROUP BY city_id) cto_count ON cto_count.city_id = c.id ORDER BY c.name`),
+      pool.query(`SELECT c.id, c.name, c.total_ports, COALESCE(clients_count.count,0) AS used_ports FROM ctos c LEFT JOIN (SELECT cto_id, COUNT(*) AS count FROM clients WHERE status = 'active' GROUP BY cto_id) clients_count ON clients_count.cto_id = c.id ORDER BY used_ports DESC LIMIT 10`),
+      pool.query(`SELECT status, COUNT(*) AS count FROM clients GROUP BY status`)
     ]);
 
     res.json({
       total_units: parseInt(unitsCountRes.rows[0]?.count || '0'),
       total_cities: parseInt(citiesCountRes.rows[0]?.count || '0'),
       total_ctos: parseInt(ctosCountRes.rows[0]?.count || '0'),
-      total_clients: parseInt(clientsCountRes.rows[0]?.count || '0')
+      total_clients: parseInt(clientsCountRes.rows[0]?.count || '0'),
+      units: unitsDetailRes.rows,
+      cities: citiesDetailRes.rows,
+      ctos: ctosDetailRes.rows,
+      client_statuses: clientsStatusRes.rows
     });
   } catch (error: any) {
     console.error('Error fetching stats:', error);

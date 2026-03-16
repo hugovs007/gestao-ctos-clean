@@ -140,7 +140,16 @@ function Dashboard() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
-  const [dashboardStats, setDashboardStats] = useState({ total_units: 0, total_cities: 0, total_ctos: 0, total_clients: 0 });
+  const [dashboardStats, setDashboardStats] = useState({
+    total_units: 0,
+    total_cities: 0,
+    total_ctos: 0,
+    total_clients: 0,
+    units: [] as Array<{ id: number; name: string; city_count: number }> ,
+    cities: [] as Array<{ id: number; name: string; cto_count: number }> ,
+    ctos: [] as Array<{ id: number; name: string; total_ports: number; used_ports: number }> ,
+    client_statuses: [] as Array<{ status: string; count: number }>
+  });
   
   // Unit Management
   const [showUnitModal, setShowUnitModal] = useState(false);
@@ -349,6 +358,91 @@ function Dashboard() {
             <Button variant="secondary" onClick={() => setShowUnitModal(true)}>Adicionar Unidade</Button>
             <Button variant="secondary" onClick={() => setActiveTab('config')}>Configuração</Button>
           </div>
+
+          <Card className="p-6 mt-4">
+            <h3 className="text-lg font-semibold text-slate-900 mb-3">Dados do Banco</h3>
+            <p className="text-sm text-slate-600 mb-4">Resumo dos registros atualmente existentes.</p>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div>
+                <h4 className="text-xs uppercase text-slate-400 mb-2">Unidades - Cidades</h4>
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <div className="bg-slate-50 px-3 py-2 text-xs font-medium">Unidade / cidades</div>
+                  <div className="max-h-44 overflow-y-auto">
+                    {dashboardStats.units.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-slate-500">Nenhuma unidade cadastrada.</div>
+                    ) : (
+                      dashboardStats.units.map((unit) => (
+                        <div key={unit.id} className="px-3 py-2 flex justify-between text-sm border-b border-slate-100">
+                          <span>{unit.name}</span>
+                          <span className="font-bold">{unit.city_count}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-xs uppercase text-slate-400 mb-2">Cidades - CTOs</h4>
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <div className="bg-slate-50 px-3 py-2 text-xs font-medium">Cidade / CTOs</div>
+                  <div className="max-h-44 overflow-y-auto">
+                    {dashboardStats.cities.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-slate-500">Nenhuma cidade cadastrada.</div>
+                    ) : (
+                      dashboardStats.cities.map((city) => (
+                        <div key={city.id} className="px-3 py-2 flex justify-between text-sm border-b border-slate-100">
+                          <span>{city.name}</span>
+                          <span className="font-bold">{city.cto_count}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div>
+                <h4 className="text-xs uppercase text-slate-400 mb-2">TOP CTOs (portas ativas)</h4>
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <div className="bg-slate-50 px-3 py-2 text-xs font-medium">CTO / Ocupação</div>
+                  <div className="max-h-44 overflow-y-auto">
+                    {dashboardStats.ctos.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-slate-500">Nenhuma CTO cadastrada.</div>
+                    ) : (
+                      dashboardStats.ctos.map((cto) => (
+                        <div key={cto.id} className="px-3 py-2 flex justify-between text-sm border-b border-slate-100">
+                          <span>{cto.name}</span>
+                          <span className="font-bold">{cto.used_ports}/{cto.total_ports}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-xs uppercase text-slate-400 mb-2">Status de Clientes</h4>
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <div className="bg-slate-50 px-3 py-2 text-xs font-medium">Status / Contagem</div>
+                  <div className="max-h-44 overflow-y-auto">
+                    {dashboardStats.client_statuses.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-slate-500">Nenhum cliente cadastrado.</div>
+                    ) : (
+                      dashboardStats.client_statuses.map((status) => (
+                        <div key={status.status} className="px-3 py-2 flex justify-between text-sm border-b border-slate-100">
+                          <span>{status.status}</span>
+                          <span className="font-bold">{status.count}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Card>
         </div>
       ) : activeTab === 'config' ? (
         <Card className="p-6">
