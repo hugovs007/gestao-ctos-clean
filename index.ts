@@ -12,10 +12,9 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 
 console.log('✅ DATABASE_URL:', process.env.DATABASE_URL ? 'presente' : 'ausente');
 
-// Se não carregou, tenta hard-code (último recurso)
+// Se não carregou, exibe aviso
 if (!process.env.DATABASE_URL) {
-  console.log('⚠️ Usando DATABASE_URL hard-coded para teste');
-  process.env.DATABASE_URL = 'postgresql://neondb_owner:npg_oInDt2H6EWUh@ep-winter-mode-ac8fc3d9.sa-east-1.aws.neon.tech/neondb?sslmode=require';
+  console.error('❌ ERRO: DATABASE_URL não encontrada no .env');
 }
 
 // Agora importa e executa o servidor
