@@ -1454,7 +1454,7 @@ function ViabilityCheck() {
     state: '',
     zipCode: ''
   });
-  const [radius, setRadius] = useState(500); // Default 500m
+  const [radius, setRadius] = useState(1000); // Default 1000m
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<(any & { distance: number })[]>([]);
   const [searched, setSearched] = useState(false);
@@ -1499,15 +1499,14 @@ function ViabilityCheck() {
           lat = geoData.lat;
           lng = geoData.lng;
           if (geoData.details) {
-            const newFields = {
-              street: geoData.details.road || '',
-              number: geoData.details.house_number || '',
-              neighborhood: geoData.details.suburb || '',
-              city: geoData.details.city || '',
-              state: (geoData.details.state || '').substring(0, 2).toUpperCase(),
-              zipCode: geoData.details.postcode || ''
-            };
-            setStructured(newFields);
+            setStructured(prev => ({
+              street: prev.street || geoData.details.road || '',
+              number: prev.number || geoData.details.house_number || '',
+              neighborhood: prev.neighborhood || geoData.details.suburb || '',
+              city: prev.city || geoData.details.city || '',
+              state: prev.state || (geoData.details.state || '').substring(0, 2).toUpperCase(),
+              zipCode: prev.zipCode || geoData.details.postcode || ''
+            }));
           }
         } else {
           alert("Localização não encontrada. Tente conferir o endereço ou usar coordenadas.");
@@ -1745,7 +1744,7 @@ function ViabilityCheck() {
               <input
                 type="range"
                 min="100"
-                max="3000"
+                max="1000"
                 step="100"
                 className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                 value={radius}
@@ -1753,8 +1752,8 @@ function ViabilityCheck() {
               />
               <div className="flex justify-between text-[10px] text-slate-400 mt-2 font-medium">
                 <span>100m</span>
-                <span>1500m</span>
-                <span>3000m</span>
+                <span>500m</span>
+                <span>1000m</span>
               </div>
             </div>
 
