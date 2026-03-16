@@ -187,23 +187,36 @@ app.post("/api/ctos", async (req, res) => {
 
 app.get("/api/ctos/sync-coords", async (req, res) => {
   try {
-    const ctisRes = await pool.query("SELECT id, name, address FROM ctos WHERE latitude IS NULL OR longitude IS NULL");
+    const ctisRes = await pool.query(`
+      SELECT c.id, c.name, c.address, ci.name as city_name 
+      FROM ctos c 
+      JOIN cities ci ON c.city_id = ci.id 
+      WHERE c.latitude IS NULL OR c.longitude IS NULL
+    `);
     const count = ctisRes.rowCount || 0;
     let fixed = 0;
+    let failed = 0;
 
     for (const cto of ctisRes.rows) {
       if (cto.address) {
-        const geo = await geocodeAddress(cto.address);
+        // Pass both street address and city name for better accuracy
+        const geo = await geocodeAddress(cto.address, undefined, cto.city_name);
         if (geo) {
           await pool.query(
             "UPDATE ctos SET latitude = $1, longitude = $2 WHERE id = $3",
             [geo.lat, geo.lng, cto.id]
           );
           fixed++;
+          console.log(`[Sync] Geocoded CTO: ${cto.name} in ${cto.city_name}`);
+        } else {
+          failed++;
+          console.warn(`[Sync] Failed to geocode CTO: ${cto.name} - Address: ${cto.address} City: ${cto.city_name}`);
         }
+      } else {
+        failed++;
       }
     }
-    res.json({ total: count, fixed });
+    res.json({ total: count, fixed, failed });
   } catch (error: any) {
     console.error("Sync error:", error);
     res.status(500).json({ error: error.message });

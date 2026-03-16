@@ -796,7 +796,13 @@ function CityView() {
     try {
       const res = await fetch('/api/ctos/sync-coords');
       const data = await res.json();
-      alert(`Sincronização concluída! Total corrigido: ${data.fixed} de ${data.total} CTOs.`);
+      if (data.fixed === 0 && data.total > 0) {
+        alert(`Nenhuma CTO foi localizada. \n\nTotal analisado: ${data.total} \nFalhas: ${data.failed} \n\nDica: Verifique se os endereços são válidos (ex: Nome da Rua, Bairro, Cidade).`);
+      } else if (data.total === 0) {
+        alert('Todas as CTOs já possuem coordenadas!');
+      } else {
+        alert(`Sincronização concluída! \nLocalizadas: ${data.fixed} \nNão localizadas: ${data.failed} \nTotal analisado: ${data.total}`);
+      }
       fetchCTOs();
     } catch (err) {
       console.error('Failed to sync coords', err);
