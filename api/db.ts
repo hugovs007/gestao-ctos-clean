@@ -66,6 +66,8 @@ export const initializeDb = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(cto_id, port_number)
       );
+
+      CREATE INDEX IF NOT EXISTS idx_ctos_coords ON ctos (latitude, longitude) WHERE latitude IS NOT NULL AND longitude IS NOT NULL;
     `);
     
     // Migrations logic

@@ -381,31 +381,30 @@ app.get("/api/viability", async (req, res) => {
     // Haversine formula to calculate distance in KM
     // 6371 is the earth radius in KM
     const result = await pool.query(`
-      SELECT 
-        c.*, 
-        COALESCE(stats.used_ports, 0)::int as used_ports,
-        (
-          6371 * acos(
-            cos(radians($1)) * cos(radians(c.latitude)) * 
-            cos(radians(c.longitude) - radians($2)) + 
-            sin(radians($1)) * sin(radians(c.latitude))
-          )
-        ) AS distance
-      FROM ctos c
-      LEFT JOIN (
-        SELECT cto_id, COUNT(*) as used_ports
-        FROM clients
-        WHERE status = 'active'
-        GROUP BY cto_id
-      ) stats ON c.id = stats.cto_id
-      WHERE c.latitude IS NOT NULL AND c.longitude IS NOT NULL
-      AND (
-        6371 * acos(
-          cos(radians($1)) * cos(radians(c.latitude)) * 
-          cos(radians(c.longitude) - radians($2)) + 
-          sin(radians($1)) * sin(radians(c.latitude))
-        )
-      ) <= $3
+      WITH cto_distances AS (
+        SELECT 
+          c.*, 
+          COALESCE(stats.used_ports, 0)::int as used_ports,
+          (
+            6371 * acos(
+              LEAST(1.0, GREATEST(-1.0, 
+                cos(radians($1)) * cos(radians(c.latitude)) * 
+                cos(radians(c.longitude) - radians($2)) + 
+                sin(radians($1)) * sin(radians(c.latitude))
+              ))
+            )
+          ) AS distance
+        FROM ctos c
+        LEFT JOIN (
+          SELECT cto_id, COUNT(*) as used_ports
+          FROM clients
+          WHERE status = 'active'
+          GROUP BY cto_id
+        ) stats ON c.id = stats.cto_id
+        WHERE c.latitude IS NOT NULL AND c.longitude IS NOT NULL
+      )
+      SELECT * FROM cto_distances
+      WHERE distance <= $3
       ORDER BY distance ASC
     `, [latitude, longitude, radiusKm]);
 
