@@ -1446,6 +1446,15 @@ function CTODetail() {
 
 function ViabilityCheck() {
   const [address, setAddress] = useState('');
+  const [useStructured, setUseStructured] = useState(false);
+  const [structured, setStructured] = useState({
+    street: '',
+    number: '',
+    neighborhood: '',
+    city: '',
+    state: '',
+    zipCode: ''
+  });
   const [radius, setRadius] = useState(0.5); // Default 0.5km
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<(any & { distance: number })[]>([]);
@@ -1453,7 +1462,23 @@ function ViabilityCheck() {
 
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!address.trim()) return;
+    
+    let query = '';
+    if (useStructured) {
+      const parts = [
+        structured.street,
+        structured.number,
+        structured.neighborhood,
+        structured.city,
+        structured.state,
+        structured.zipCode
+      ].filter(p => p.trim() !== '');
+      query = parts.join(', ');
+    } else {
+      query = address.trim();
+    }
+
+    if (!query) return;
 
     setLoading(true);
     setSearched(true);
@@ -1464,21 +1489,20 @@ function ViabilityCheck() {
       let lng: number | null = null;
 
       // Check if input is coordinates
-      const coordsMatch = address.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
+      const coordsMatch = query.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
       if (coordsMatch) {
         lat = parseFloat(coordsMatch[1]);
         lng = parseFloat(coordsMatch[2]);
       } else {
         // Try geocoding
         try {
-          const geoRes = await fetch(`/api/geocode?q=${encodeURIComponent(address)}`);
+          const geoRes = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
           if (geoRes.ok) {
             const geoData = await geoRes.json();
             lat = geoData.lat;
             lng = geoData.lng;
-            // Optional: setAddress(geoData.display_name); // Don't overwrite yet to avoid confusion
           } else {
-            alert("Endereço não localizado. Tente usar coordenadas (lat, lng).");
+            alert("Localização não encontrada. Tente conferir o endereço ou usar coordenadas.");
             setLoading(false);
             return;
           }
@@ -1527,9 +1551,26 @@ function ViabilityCheck() {
       </div>
 
       <Card className="p-6">
-        <form onSubmit={handleSearch} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
+        <div className="flex gap-4 mb-6 border-b border-slate-100 pb-4">
+          <button 
+            type="button"
+            onClick={() => setUseStructured(false)}
+            className={cn("text-sm font-medium px-4 py-2 rounded-lg transition-colors", !useStructured ? "bg-indigo-50 text-indigo-600" : "text-slate-500 hover:bg-slate-50")}
+          >
+            Busca Rápida / Coordenadas
+          </button>
+          <button 
+            type="button"
+            onClick={() => setUseStructured(true)}
+            className={cn("text-sm font-medium px-4 py-2 rounded-lg transition-colors", useStructured ? "bg-indigo-50 text-indigo-600" : "text-slate-500 hover:bg-slate-50")}
+          >
+            Endereço Estruturado
+          </button>
+        </div>
+
+        <form onSubmit={handleSearch} className="space-y-6">
+          {!useStructured ? (
+            <div className="space-y-4">
               <label className="block text-sm font-medium text-slate-700 mb-1">Endereço ou Coordenadas (Lat, Lng)</label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
@@ -1549,9 +1590,75 @@ function ViabilityCheck() {
                 </Button>
               </div>
             </div>
-            
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="md:col-span-4">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Rua / Logradouro</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Rua das Flores"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={structured.street}
+                  onChange={(e) => setStructured({ ...structured, street: e.target.value })}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Número</label>
+                <input
+                  type="text"
+                  placeholder="Ex: 123-A"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={structured.number}
+                  onChange={(e) => setStructured({ ...structured, number: e.target.value })}
+                />
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Bairro</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Centro"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={structured.neighborhood}
+                  onChange={(e) => setStructured({ ...structured, neighborhood: e.target.value })}
+                />
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-slate-700 mb-1">CEP</label>
+                <input
+                  type="text"
+                  placeholder="Ex: 59300-000"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={structured.zipCode}
+                  onChange={(e) => setStructured({ ...structured, zipCode: e.target.value })}
+                />
+              </div>
+              <div className="md:col-span-4">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Cidade</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Caicó"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={structured.city}
+                  onChange={(e) => setStructured({ ...structured, city: e.target.value })}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Estado</label>
+                <input
+                  type="text"
+                  placeholder="Ex: RN"
+                  maxLength={2}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={structured.state}
+                  onChange={(e) => setStructured({ ...structured, state: e.target.value.toUpperCase() })}
+                />
+              </div>
+            </div>
+          )}
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Raio de busca (km): {radius}km</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Raio de busca (km): {radius}km</label>
               <input
                 type="range"
                 min="0.1"
@@ -1569,7 +1676,7 @@ function ViabilityCheck() {
             </div>
 
             <div className="flex items-end">
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button type="submit" className="w-full h-[42px] font-bold" disabled={loading}>
                 {loading ? 'Consultando...' : 'Verificar Viabilidade'}
               </Button>
             </div>
