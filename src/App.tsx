@@ -672,9 +672,12 @@ function CityView() {
   const [isEditingCity, setIsEditingCity] = useState(false);
   const [editCityForm, setEditCityForm] = useState({ name: '', unit_id: '' });
 
-  // Edição de CTO
   const [editingCTO, setEditingCTO] = useState<CTO | null>(null);
   const [editForm, setEditForm] = useState({ name: '', address: '', total_ports: 16 });
+
+  // Sync state
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState({ fixed: 0, failed: 0, remaining: 0, total: 0 });
 
   useEffect(() => {
     fetchCTOs();
@@ -807,21 +810,43 @@ function CityView() {
   };
 
   const handleSyncCoords = async () => {
-    if (!confirm('Deseja buscar coordenadas para todas as CTOs desta cidade que estão sem localização?')) return;
+    if (!confirm('Deseja iniciar a sincronização progressiva de coordenadas? Isso processará as CTOs em lotes para evitar sobrecarga.')) return;
+    
+    setIsSyncing(true);
+    let currentFixed = 0;
+    let currentFailed = 0;
+    let finished = false;
+
     try {
-      const res = await fetch('/api/ctos/sync-coords');
-      const data = await res.json();
-      if (data.fixed === 0 && data.total > 0) {
-        alert(`Nenhuma CTO foi localizada. \n\nTotal analisado: ${data.total} \nFalhas: ${data.failed} \n\nDica: Verifique se os endereços são válidos (ex: Nome da Rua, Bairro, Cidade).`);
-      } else if (data.total === 0) {
-        alert('Todas as CTOs já possuem coordenadas!');
-      } else {
-        alert(`Sincronização concluída! \nLocalizadas: ${data.fixed} \nNão localizadas: ${data.failed} \nTotal analisado: ${data.total}`);
+      while (!finished) {
+        const res = await fetch('/api/ctos/sync-coords?limit=50');
+        const data = await res.json();
+        
+        currentFixed += data.fixed;
+        currentFailed += data.failed;
+        
+        setSyncProgress({
+          fixed: currentFixed,
+          failed: currentFailed,
+          remaining: data.total_remaining,
+          total: currentFixed + currentFailed + data.total_remaining
+        });
+
+        if (data.total_in_batch < 50 || data.total_remaining === 0) {
+          finished = true;
+        }
+        
+        // Brief pause to allow UI updates and not spam the server
+        await new Promise(r => setTimeout(r, 500));
       }
+      
+      alert(`Sincronização concluída! \nSincronizados: ${currentFixed} \nFalhas: ${currentFailed}`);
       fetchCTOs();
     } catch (err) {
       console.error('Failed to sync coords', err);
-      alert('Erro ao sincronizar coordenadas.');
+      alert('Erro durante a sincronização progressiva.');
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -869,13 +894,36 @@ function CityView() {
           <Button 
             variant="secondary" 
             onClick={handleSyncCoords} 
+            disabled={isSyncing}
             className="flex items-center gap-2 text-indigo-600 border-indigo-200 hover:bg-indigo-50"
           >
-            <RefreshCw className="w-4 h-4" />
-            Sincronizar Coordenadas
+            <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
+            {isSyncing ? `Sincronizando (${syncProgress.fixed + syncProgress.failed} / ${syncProgress.total})` : "Sincronizar Coordenadas"}
           </Button>
         </div>
       </div>
+
+      {isSyncing && (
+        <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-sm font-bold text-indigo-900">Progresso da Sincronização</span>
+            <span className="text-xs text-indigo-600 font-medium">
+              {Math.round(((syncProgress.fixed + syncProgress.failed) / syncProgress.total) * 100 || 0)}%
+            </span>
+          </div>
+          <div className="w-full bg-indigo-200 rounded-full h-2">
+            <div 
+              className="bg-indigo-600 h-2 rounded-full transition-all duration-500" 
+              style={{ width: `${((syncProgress.fixed + syncProgress.failed) / syncProgress.total) * 100 || 0}%` }}
+            />
+          </div>
+          <div className="flex justify-between mt-2 text-[10px] text-indigo-700 uppercase tracking-wider font-bold">
+            <span>Localizados: {syncProgress.fixed}</span>
+            <span>Falhas: {syncProgress.failed}</span>
+            <span>Restantes: {syncProgress.remaining}</span>
+          </div>
+        </div>
+      )}
 
       {/* City Edit Modal */}
       {isEditingCity && (

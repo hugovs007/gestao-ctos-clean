@@ -186,13 +186,20 @@ app.post("/api/ctos", async (req, res) => {
 });
 
 app.get("/api/ctos/sync-coords", async (req, res) => {
+  const limit = parseInt(req.query.limit as string) || 50;
   try {
     const ctisRes = await pool.query(`
       SELECT c.id, c.name, c.address, ci.name as city_name 
       FROM ctos c 
       JOIN cities ci ON c.city_id = ci.id 
       WHERE c.latitude IS NULL OR c.longitude IS NULL
-    `);
+      LIMIT $1
+    `, [limit]);
+    
+    // Get total remaining count for progress bar
+    const remainingRes = await pool.query("SELECT COUNT(*) FROM ctos WHERE latitude IS NULL OR longitude IS NULL");
+    const totalRemaining = parseInt(remainingRes.rows[0].count);
+    
     const count = ctisRes.rowCount || 0;
     let fixed = 0;
     let failed = 0;
@@ -207,16 +214,14 @@ app.get("/api/ctos/sync-coords", async (req, res) => {
             [geo.lat, geo.lng, cto.id]
           );
           fixed++;
-          console.log(`[Sync] Geocoded CTO: ${cto.name} in ${cto.city_name}`);
         } else {
           failed++;
-          console.warn(`[Sync] Failed to geocode CTO: ${cto.name} - Address: ${cto.address} City: ${cto.city_name}`);
         }
       } else {
         failed++;
       }
     }
-    res.json({ total: count, fixed, failed });
+    res.json({ total_in_batch: count, fixed, failed, total_remaining: totalRemaining });
   } catch (error: any) {
     console.error("Sync error:", error);
     res.status(500).json({ error: error.message });
@@ -424,6 +429,17 @@ app.post("/api/import", async (req, res) => {
 
 // Helper Geocoding Function
 async function geocodeAddress(q: string, street?: string, city?: string, state?: string) {
+  // Check if q itself contains coordinates pattern like "-6.8893, -36.9112"
+  const coordsMatch = q.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
+  if (coordsMatch) {
+    return {
+      lat: parseFloat(coordsMatch[1]),
+      lng: parseFloat(coordsMatch[2]),
+      display_name: q,
+      details: {}
+    };
+  }
+
   const googleKey = process.env.GOOGLE_MAPS_API_KEY;
 
   try {
