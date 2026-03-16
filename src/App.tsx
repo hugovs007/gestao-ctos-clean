@@ -1463,21 +1463,7 @@ function ViabilityCheck() {
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     
-    let query = '';
-    if (useStructured) {
-      const parts = [
-        structured.street,
-        structured.number,
-        structured.neighborhood,
-        structured.city,
-        structured.state,
-        structured.zipCode
-      ].filter(p => p.trim() !== '');
-      query = parts.join(', ');
-    } else {
-      query = address.trim();
-    }
-
+    const query = address.trim();
     if (!query) return;
 
     setLoading(true);
@@ -1495,20 +1481,24 @@ function ViabilityCheck() {
         lng = parseFloat(coordsMatch[2]);
       } else {
         // Try geocoding
-        try {
-          const geoRes = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
-          if (geoRes.ok) {
-            const geoData = await geoRes.json();
-            lat = geoData.lat;
-            lng = geoData.lng;
-          } else {
-            alert("Localização não encontrada. Tente conferir o endereço ou usar coordenadas.");
-            setLoading(false);
-            return;
+        const geoRes = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
+        if (geoRes.ok) {
+          const geoData = await geoRes.json();
+          lat = geoData.lat;
+          lng = geoData.lng;
+          // Sync structured fields if available
+          if (geoData.details) {
+            setStructured({
+              street: geoData.details.road || '',
+              number: geoData.details.house_number || '',
+              neighborhood: geoData.details.suburb || '',
+              city: geoData.details.city || '',
+              state: geoData.details.state || '',
+              zipCode: geoData.details.postcode || ''
+            });
           }
-        } catch (err) {
-          console.error("Geocoding failed", err);
-          alert("Erro ao buscar endereço. Tente novamente.");
+        } else {
+          alert("Localização não encontrada. Tente conferir o endereço ou usar coordenadas.");
           setLoading(false);
           return;
         }
@@ -1528,141 +1518,216 @@ function ViabilityCheck() {
     }
   };
 
+  const handleFillFromAddress = async () => {
+    if (!address.trim()) return;
+    setLoading(true);
+    try {
+      const geoRes = await fetch(`/api/geocode?q=${encodeURIComponent(address)}`);
+      if (geoRes.ok) {
+        const geoData = await geoRes.json();
+        if (geoData.details) {
+          setStructured({
+            street: geoData.details.road || '',
+            number: geoData.details.house_number || '',
+            neighborhood: geoData.details.suburb || '',
+            city: geoData.details.city || '',
+            state: (geoData.details.state || '').substring(0, 2).toUpperCase(),
+            zipCode: geoData.details.postcode || ''
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fill details", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleGetCurrentLocation = () => {
     if (!navigator.geolocation) {
       alert("Geolocalização não é suportada.");
       return;
     }
+    setLoading(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setAddress(`${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`);
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setAddress(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+        
+        // Reverse Geocode to fill fields
+        try {
+          const res = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.details) {
+              setStructured({
+                street: data.details.road || '',
+                number: data.details.house_number || '',
+                neighborhood: data.details.suburb || '',
+                city: data.details.city || '',
+                state: (data.details.state || '').substring(0, 2).toUpperCase(),
+                zipCode: data.details.postcode || ''
+              });
+            }
+          }
+        } catch (err) {
+          console.error("Reverse geocode failed", err);
+        } finally {
+          setLoading(false);
+        }
       },
       (err) => {
         alert("Erro ao obter localização: " + err.message);
+        setLoading(false);
       }
     );
   };
+
+  // Build query from structured fields
+  useEffect(() => {
+    if (useStructured) {
+      const parts = [
+        structured.street,
+        structured.number,
+        structured.neighborhood,
+        structured.city,
+        structured.state,
+        structured.zipCode
+      ].filter(p => p && p.trim() !== '');
+      if (parts.length > 0) {
+        setAddress(parts.join(', '));
+      }
+    }
+  }, [structured, useStructured]);
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Consulta de Viabilidade</h1>
-        <p className="text-slate-500">Encontre as CTOs mais próximas com portas disponíveis.</p>
+        <p className="text-slate-500">Localize as CTOs mais próximas com automatização de endereço.</p>
       </div>
 
       <Card className="p-6">
-        <div className="flex gap-4 mb-6 border-b border-slate-100 pb-4">
-          <button 
-            type="button"
-            onClick={() => setUseStructured(false)}
-            className={cn("text-sm font-medium px-4 py-2 rounded-lg transition-colors", !useStructured ? "bg-indigo-50 text-indigo-600" : "text-slate-500 hover:bg-slate-50")}
-          >
-            Busca Rápida / Coordenadas
-          </button>
-          <button 
-            type="button"
-            onClick={() => setUseStructured(true)}
-            className={cn("text-sm font-medium px-4 py-2 rounded-lg transition-colors", useStructured ? "bg-indigo-50 text-indigo-600" : "text-slate-500 hover:bg-slate-50")}
-          >
-            Endereço Estruturado
-          </button>
-        </div>
-
         <form onSubmit={handleSearch} className="space-y-6">
-          {!useStructured ? (
-            <div className="space-y-4">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Endereço ou Coordenadas (Lat, Lng)</label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <MapPin className="h-4 w-4 text-slate-400" />
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Ex: Rua Tal, 123 ou -6.8893, -36.9112"
-                    className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                  />
+          {/* Main Search Input */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-slate-700">Endereço de Busca ou Coordenadas</label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <MapPin className="h-4 w-4 text-slate-400" />
                 </div>
-                <Button type="button" variant="secondary" onClick={handleGetCurrentLocation} title="Usar localização atual">
-                  <Locate className="w-4 h-4" />
-                </Button>
+                <input
+                  type="text"
+                  placeholder="Rua, Número, Bairro, Cidade ou -6.8893, -36.9112"
+                  className="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-medium"
+                  value={address}
+                  onChange={(e) => {
+                    setAddress(e.target.value);
+                    if (useStructured) setUseStructured(false); // Disable auto-sync if user manually types in main bar
+                  }}
+                />
               </div>
+              <Button type="button" variant="secondary" onClick={handleGetCurrentLocation} title="Minha localização atual">
+                <Locate className="w-4 h-4" />
+              </Button>
             </div>
-          ) : (
+          </div>
+
+          <div className="flex items-center justify-between group cursor-pointer" onClick={() => setUseStructured(!useStructured)}>
+            <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+               <Filter className="w-4 h-4 text-indigo-500" />
+               Detalhamento do Endereço
+            </div>
+            <div className={cn("transition-transform duration-200", useStructured ? "rotate-180" : "")}>
+              <ChevronDown className="w-4 h-4 text-slate-400" />
+            </div>
+          </div>
+
+          {useStructured && (
             <div className="grid grid-cols-1 md:grid-cols-6 gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
               <div className="md:col-span-4">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Rua / Logradouro</label>
+                <label className="block text-sm font-medium text-slate-400 mb-1">Rua / Logradouro</label>
                 <input
                   type="text"
                   placeholder="Ex: Rua das Flores"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
                   value={structured.street}
                   onChange={(e) => setStructured({ ...structured, street: e.target.value })}
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Número</label>
+                <label className="block text-sm font-medium text-slate-400 mb-1">Número</label>
                 <input
                   type="text"
-                  placeholder="Ex: 123-A"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  placeholder="Ex: 123"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
                   value={structured.number}
                   onChange={(e) => setStructured({ ...structured, number: e.target.value })}
                 />
               </div>
               <div className="md:col-span-3">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Bairro</label>
+                <label className="block text-sm font-medium text-slate-400 mb-1">Bairro</label>
                 <input
                   type="text"
                   placeholder="Ex: Centro"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
                   value={structured.neighborhood}
                   onChange={(e) => setStructured({ ...structured, neighborhood: e.target.value })}
                 />
               </div>
               <div className="md:col-span-3">
-                <label className="block text-sm font-medium text-slate-700 mb-1">CEP</label>
+                <label className="block text-sm font-medium text-slate-400 mb-1">CEP</label>
                 <input
                   type="text"
                   placeholder="Ex: 59300-000"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
                   value={structured.zipCode}
                   onChange={(e) => setStructured({ ...structured, zipCode: e.target.value })}
                 />
               </div>
               <div className="md:col-span-4">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Cidade</label>
+                <label className="block text-sm font-medium text-slate-400 mb-1">Cidade</label>
                 <input
                   type="text"
                   placeholder="Ex: Caicó"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
                   value={structured.city}
                   onChange={(e) => setStructured({ ...structured, city: e.target.value })}
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Estado</label>
+                <label className="block text-sm font-medium text-slate-400 mb-1">UF</label>
                 <input
                   type="text"
                   placeholder="Ex: RN"
                   maxLength={2}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
                   value={structured.state}
                   onChange={(e) => setStructured({ ...structured, state: e.target.value.toUpperCase() })}
                 />
               </div>
+              <div className="md:col-span-6 flex justify-end">
+                <button 
+                  type="button"
+                  onClick={handleFillFromAddress}
+                  className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1"
+                >
+                  <Locate className="w-3 h-3" />
+                  Preencher campos a partir da busca rápida
+                </button>
+              </div>
             </div>
           )}
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-slate-100">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Raio de busca (km): {radius}km</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Raio de busca: <span className="text-indigo-600 font-bold">{radius}km</span></label>
               <input
                 type="range"
                 min="0.1"
-                max="2.0"
+                max="3.0"
                 step="0.1"
                 className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                 value={radius}
@@ -1670,13 +1735,13 @@ function ViabilityCheck() {
               />
               <div className="flex justify-between text-[10px] text-slate-400 mt-1">
                 <span>0.1km</span>
-                <span>1.0km</span>
-                <span>2.0km</span>
+                <span>1.5km</span>
+                <span>3.0km</span>
               </div>
             </div>
 
             <div className="flex items-end">
-              <Button type="submit" className="w-full h-[42px] font-bold" disabled={loading}>
+              <Button type="submit" className="w-full h-[46px] font-bold text-lg" disabled={loading}>
                 {loading ? 'Consultando...' : 'Verificar Viabilidade'}
               </Button>
             </div>

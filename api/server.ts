@@ -429,10 +429,19 @@ app.get("/api/geocode", async (req, res) => {
     const data = await response.json() as any[];
     
     if (data && data.length > 0) {
+      const address = data[0].address || {};
       res.json({
         lat: parseFloat(data[0].lat),
         lng: parseFloat(data[0].lon),
-        display_name: data[0].display_name
+        display_name: data[0].display_name,
+        details: {
+          road: address.road || '',
+          house_number: address.house_number || '',
+          suburb: address.suburb || address.neighbourhood || '',
+          city: address.city || address.town || address.village || '',
+          state: address.state || '',
+          postcode: address.postcode || ''
+        }
       });
     } else {
       res.status(404).json({ error: "Endereço não encontrado" });
@@ -440,6 +449,41 @@ app.get("/api/geocode", async (req, res) => {
   } catch (error: any) {
     console.error("Geocoding error:", error);
     res.status(500).json({ error: "Erro ao buscar coordenadas" });
+  }
+});
+
+// Reverse Geocoding
+app.get("/api/reverse-geocode", async (req, res) => {
+  const { lat, lng } = req.query;
+  if (!lat || !lng) return res.status(400).json({ error: "Latitude e Longitude são obrigatórias" });
+
+  try {
+    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`, {
+      headers: {
+        'User-Agent': 'GestaoCTOs/1.0'
+      }
+    });
+    const data = await response.json() as any;
+    
+    if (data && data.address) {
+      const address = data.address;
+      res.json({
+        display_name: data.display_name,
+        details: {
+          road: address.road || '',
+          house_number: address.house_number || '',
+          suburb: address.suburb || address.neighbourhood || '',
+          city: address.city || address.town || address.village || '',
+          state: address.state || '',
+          postcode: address.postcode || ''
+        }
+      });
+    } else {
+      res.status(404).json({ error: "Localização não encontrada" });
+    }
+  } catch (error: any) {
+    console.error("Reverse geocoding error:", error);
+    res.status(500).json({ error: "Erro ao buscar detalhes do endereço" });
   }
 });
 
