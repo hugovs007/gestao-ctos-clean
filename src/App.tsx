@@ -323,16 +323,6 @@ function Dashboard() {
           <h1 className="text-2xl font-bold text-slate-900">Infraestrutura</h1>
           <p className="text-slate-500">Gerencie as unidades e cidades da sua rede.</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => setShowImportModal(true)}>
-            <Search className="w-4 h-4 mr-2" />
-            Importar Dados
-          </Button>
-          <Button variant="secondary" onClick={() => setShowUnitModal(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Gerenciar Unidades
-          </Button>
-        </div>
       </div>
 
       <Tabs
@@ -341,7 +331,6 @@ function Dashboard() {
         tabs={[
           { id: 'dashboard', label: 'Dashboard' },
           { id: 'cities', label: 'Lista de Unidades' },
-          { id: 'new', label: 'Cadastrar Cidade' },
           { id: 'config', label: 'Configuração' }
         ]}
       />
@@ -465,63 +454,119 @@ function Dashboard() {
         </div>
       ) : activeTab === 'config' ? (
         <Card className="p-6">
-          <h3 className="text-lg font-medium text-slate-900 mb-4">Configuração do Sistema</h3>
-          <p className="text-sm text-slate-500">Temas e importação de dados</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">Tema</label>
-              <input type="text" value="Proxxima Telecom" disabled className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+          <h3 className="text-lg font-medium text-slate-900 mb-4">Configuração e Infraestrutura</h3>
+          <p className="text-sm text-slate-500">Gerencie cidades, unidades e importação de dados.</p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="border border-slate-200 rounded-xl p-4">
+              <h4 className="text-sm font-semibold mb-2">Cadastrar Cidade</h4>
+              <form onSubmit={handleAddCity} className="space-y-3">
+                <input
+                  type="text"
+                  placeholder="Nome da Cidade"
+                  required
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  value={newCityName}
+                  onChange={(e) => setNewCityName(e.target.value)}
+                />
+                <select
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  value={newCityUnitId}
+                  onChange={(e) => setNewCityUnitId(e.target.value)}
+                >
+                  <option value="">Sem Unidade</option>
+                  {units.map(unit => (
+                    <option key={unit.id} value={unit.id}>{unit.name}</option>
+                  ))}
+                </select>
+                <div className="flex justify-end">
+                  <Button type="submit" size="sm">Salvar Cidade</Button>
+                </div>
+              </form>
             </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">Cor de destaque</label>
-              <input type="text" value="#DA1B96" disabled className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+
+            <div className="border border-slate-200 rounded-xl p-4">
+              <h4 className="text-sm font-semibold mb-2">Unidades</h4>
+              <div className="flex flex-col gap-2 mb-3">
+                <Button variant="secondary" size="sm" onClick={() => setShowUnitModal(true)}>
+                  Gerenciar Unidades
+                </Button>
+                <p className="text-xs text-slate-500">Adicionar/editar/excluir unidades no modal.</p>
+              </div>
+              <div className="max-h-40 overflow-y-auto border border-slate-100 rounded-lg p-2">
+                {units.length === 0 ? (
+                  <span className="text-xs text-slate-500">Nenhuma unidade cadastrada.</span>
+                ) : (
+                  units.map(unit => (
+                    <div key={unit.id} className="text-sm text-slate-700 py-1 border-b border-slate-100">{unit.name}</div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
-          <div className="mt-4">
-            <label className="block text-xs font-bold text-slate-500 mb-1">Importação de dados (CSV/JSON)</label>
-            <textarea rows={5} value={importText} onChange={(e)=>setImportText(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
-          </div>
-          <div className="mt-3 flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setImportText('')}>Limpar</Button>
-            <Button onClick={async()=>{setIsImporting(true); await new Promise(r=>setTimeout(r,700)); setIsImporting(false); alert('Importação simulada executada.');}} disabled={isImporting}>
-              {isImporting ? 'Importando...' : 'Executar importação'}
-            </Button>
-          </div>
-        </Card>
-      ) : activeTab === 'new' ? (
-        <Card className="p-6 max-w-xl">
-          <h3 className="text-lg font-medium text-slate-900 mb-4">Nova Cidade</h3>
-          <form onSubmit={handleAddCity} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Nome da Cidade</label>
-              <input
-                type="text"
-                placeholder="Ex: São Paulo"
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                value={newCityName}
-                onChange={(e) => setNewCityName(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Unidade (Opcional)</label>
-              <select
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                value={newCityUnitId}
-                onChange={(e) => setNewCityUnitId(e.target.value)}
+
+          <div className="mt-6 border border-slate-200 rounded-xl p-4">
+            <h4 className="text-sm font-semibold mb-2">Importação de Dados</h4>
+            <p className="text-xs text-slate-500 mb-3">Cole os dados Geogrid (colunas separadas por tabulação).</p>
+            <textarea
+              rows={5}
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <Button variant="secondary" size="sm" onClick={() => setImportText('')}>Limpar</Button>
+              <Button
+                size="sm"
+                onClick={async () => {
+                  if (!importText.trim()) return;
+                  setIsImporting(true);
+                  try {
+                    const lines = importText.split('\n');
+                    const rows = lines.map(line => {
+                      const cols = line.split('\t');
+                      if (cols.length < 17) return null;
+                      return {
+                        sigla: cols[1],
+                        sigla_poste: cols[2],
+                        lat: cols[5],
+                        lng: cols[6],
+                        endereco: cols[13],
+                        cidade: cols[16]
+                      };
+                    }).filter(r => r && r.cidade && r.cidade !== 'Cidade');
+
+                    if (rows.length === 0) {
+                      alert('Nenhum dado válido encontrado.');
+                      return;
+                    }
+
+                    const res = await fetch('/api/import', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ rows })
+                    });
+                    const result = await res.json();
+                    if (res.ok) {
+                      alert(`${result.count} CTOs importadas com sucesso!`);
+                      setImportText('');
+                      fetchCities();
+                    } else {
+                      alert('Erro na importação: ' + result.error);
+                    }
+                  } catch (err) {
+                    console.error('Import failed', err);
+                    alert('Falha interna ao processar dados');
+                  } finally {
+                    setIsImporting(false);
+                  }
+                }}
+                disabled={isImporting || !importText.trim()}
               >
-                <option value="">Sem Unidade</option>
-                {units.map(unit => (
-                  <option key={unit.id} value={unit.id}>{unit.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex justify-end">
-              <Button type="submit">
-                <Plus className="w-4 h-4 mr-2" />
-                Salvar Cidade
+                {isImporting ? 'Importando...' : 'Importar'}
               </Button>
             </div>
-          </form>
+          </div>
         </Card>
       ) : (
         <>
