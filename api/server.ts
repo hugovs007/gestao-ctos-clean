@@ -523,7 +523,7 @@ async function geocodeAddress(q: string, street?: string, city?: string, state?:
 
 // Viability Check
 app.get("/api/viability", async (req, res) => {
-  const { lat, lng, radius } = req.query;
+  const { lat, lng, radius, city_id, city_name } = req.query;
   
   if (!lat || !lng) {
     return res.status(400).json({ error: "Latitude e Longitude são obrigatórias" });
@@ -532,10 +532,22 @@ app.get("/api/viability", async (req, res) => {
   const latitude = parseFloat(lat as string);
   const longitude = parseFloat(lng as string);
   const radiusKm = parseFloat(radius as string) || 1.0;
+  let targetCityId: number | null = city_id ? parseInt(city_id as string) : null;
 
   try {
+    // If city_name is provided but no city_id, try to find the city
+    if (!targetCityId && city_name) {
+      const cityRes = await pool.query(
+        "SELECT id FROM cities WHERE name ILIKE $1",
+        [city_name as string]
+      );
+      if (cityRes.rows.length > 0) {
+        targetCityId = cityRes.rows[0].id;
+      }
+    }
+
     // Haversine formula to calculate distance in KM
-    const result = await pool.query(`
+    let queryText = `
       WITH cto_distances AS (
         SELECT 
           c.*, 
@@ -557,10 +569,22 @@ app.get("/api/viability", async (req, res) => {
           GROUP BY cto_id
         ) stats ON c.id = stats.cto_id
         WHERE c.latitude IS NOT NULL AND c.longitude IS NOT NULL
+    `;
+
+    const queryParams: any[] = [latitude, longitude];
+
+    if (targetCityId) {
+      queryText += ` AND c.city_id = $3`;
+      queryParams.push(targetCityId);
+    }
+
+    queryText += `
       )
       SELECT * FROM cto_distances
       ORDER BY distance ASC
-    `, [latitude, longitude]);
+    `;
+
+    const result = await pool.query(queryText, queryParams);
 
     const allNearby = result.rows;
     const withinRadius = allNearby.filter(c => c.distance <= radiusKm);

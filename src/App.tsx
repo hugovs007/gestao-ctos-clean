@@ -1626,7 +1626,12 @@ function ViabilityCheck() {
       }
 
       if (lat !== null && lng !== null) {
-        const res = await fetch(`/api/viability?lat=${lat}&lng=${lng}&radius=${radius / 1000}`);
+        let cityParam = '';
+        if (structured.city) {
+          cityParam = `&city_name=${encodeURIComponent(structured.city)}`;
+        }
+        
+        const res = await fetch(`/api/viability?lat=${lat}&lng=${lng}&radius=${radius / 1000}${cityParam}`);
         const data = await res.json();
         
         if (data && data.results) {
