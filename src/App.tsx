@@ -1546,14 +1546,15 @@ function ViabilityCheck() {
     state: '',
     zipCode: ''
   });
-  const [radius, setRadius] = useState(200); // Default 200m
+  const [radius, setRadius] = useState(500); // Default 500m
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<(any & { distance: number })[]>([]);
   const [searched, setSearched] = useState(false);
   const [geocodedAddress, setGeocodedAddress] = useState<{display: string, coords: string} | null>(null);
   const [searchDiag, setSearchDiag] = useState<{
     closest: { name: string, distance: number } | null,
-    stats: { total_ctos: number, ctos_with_gps: number, search_radius_km: number } | null
+    stats: { total_ctos: number, ctos_with_gps: number, search_radius_km: number, search_city?: string } | null,
+    currentCity?: string
   } | null>(null);
 
   // Build query from structured fields to keep main search bar synchronized
@@ -1635,11 +1636,25 @@ function ViabilityCheck() {
         const data = await res.json();
         
         if (data && data.results) {
-          setResults(data.results);
-          setSearchDiag({
-            closest: data.closest,
-            stats: data.stats
-          });
+          setResults(data.results.map((r: any) => ({
+            ...r,
+            distance: r.distance
+          })));
+          
+          if (data.results.length === 0 && data.closest) {
+            setSearchDiag(prev => ({
+              ...prev!,
+              closest: data.closest,
+              stats: data.stats,
+              currentCity: data.stats.search_city || structured.city
+            }));
+          } else {
+            setSearchDiag({
+              closest: data.closest,
+              stats: data.stats,
+              currentCity: data.stats.search_city || structured.city
+            });
+          }
         } else if (Array.isArray(data)) {
           // Fallback for older API versions just in case
           setResults(data);
@@ -1949,7 +1964,15 @@ function ViabilityCheck() {
 
           {loading ? (
             <div className="text-center py-12 text-slate-500">Buscando CTOs próximas...</div>
-          ) : results.length === 0 ? (
+          ) : (
+           searchDiag?.currentCity && (
+            <div className="mb-4 p-2 bg-indigo-50 border border-indigo-100 rounded-lg flex items-center gap-2">
+              <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Cerca de:</span>
+              <span className="text-sm font-medium text-indigo-900">{searchDiag.currentCity}</span>
+            </div>
+          ))}
+
+          {results.length === 0 ? (
             <Card className="p-12 text-center bg-slate-50 border-dashed border-2">
               <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-4" />
               <h4 className="text-lg font-bold text-slate-900 mb-2">Sem cobertura identificada</h4>

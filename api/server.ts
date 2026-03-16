@@ -599,7 +599,8 @@ app.get("/api/viability", async (req, res) => {
       stats: {
         total_ctos: parseInt(stats.total),
         ctos_with_gps: parseInt(stats.with_gps),
-        search_radius_km: radiusKm
+        search_radius_km: radiusKm,
+        search_city: targetCityId ? (await pool.query("SELECT name FROM cities WHERE id = $1", [targetCityId])).rows[0]?.name : null
       }
     });
   } catch (error: any) {
