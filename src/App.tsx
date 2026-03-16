@@ -1454,11 +1454,11 @@ function ViabilityCheck() {
     state: '',
     zipCode: ''
   });
-  const [radius, setRadius] = useState(1000); // Default 1000m
+  const [radius, setRadius] = useState(200); // Default 200m
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<(any & { distance: number })[]>([]);
   const [searched, setSearched] = useState(false);
-  const [geocodedAddress, setGeocodedAddress] = useState<string | null>(null);
+  const [geocodedAddress, setGeocodedAddress] = useState<{display: string, coords: string} | null>(null);
 
   // Build query from structured fields to keep main search bar synchronized
   const updateMainAddress = (newStructured: typeof structured) => {
@@ -1493,7 +1493,7 @@ function ViabilityCheck() {
       if (coordsMatch) {
         lat = parseFloat(coordsMatch[1]);
         lng = parseFloat(coordsMatch[2]);
-        setGeocodedAddress("Coordenadas inseridas");
+        setGeocodedAddress({ display: "Coordenadas inseridas", coords: `${lat.toFixed(6)}, ${lng.toFixed(6)}` });
       } else {
         // Prepare structured params
         const params = new URLSearchParams();
@@ -1507,7 +1507,10 @@ function ViabilityCheck() {
           const geoData = await geoRes.json();
           lat = geoData.lat;
           lng = geoData.lng;
-          setGeocodedAddress(geoData.display_name || "Localização encontrada");
+          setGeocodedAddress({ 
+            display: geoData.display_name || "Localização encontrada", 
+            coords: `${lat?.toFixed(6)}, ${lng?.toFixed(6)}` 
+          });
           
           if (geoData.details) {
             setStructured(prev => ({
@@ -1576,7 +1579,7 @@ function ViabilityCheck() {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
         setAddress(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
-        setGeocodedAddress("Sua localização atual");
+        setGeocodedAddress({ display: "Sua localização atual", coords: `${lat.toFixed(6)}, ${lng.toFixed(6)}` });
         
         try {
           const res = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`);
@@ -1764,7 +1767,7 @@ function ViabilityCheck() {
               />
               <div className="flex justify-between text-[10px] text-slate-400 mt-2 font-medium">
                 <span>100m</span>
-                <span>500m</span>
+                <span>200m</span>
                 <span>1000m</span>
               </div>
             </div>
@@ -1791,9 +1794,17 @@ function ViabilityCheck() {
               Resultados da Busca
             </h3>
             {geocodedAddress && (
-              <div className="text-xs font-medium text-slate-500 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100 flex items-center gap-1.5 animate-in fade-in zoom-in duration-300">
-                <MapPin className="w-3 h-3 text-indigo-400" />
-                Buscando em: <span className="text-slate-900 font-bold">{geocodedAddress}</span>
+              <div className="text-[10px] md:text-xs font-medium text-slate-500 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100 flex flex-col md:flex-row items-start md:items-center gap-1 md:gap-2 animate-in fade-in zoom-in duration-300">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <MapPin className="w-3 h-3 text-indigo-400 shrink-0" />
+                  <span className="truncate max-w-[200px] md:max-w-xs block">
+                    Buscando em: <span className="text-slate-900 font-bold">{geocodedAddress.display}</span>
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-sm text-[9px] font-mono">
+                  <Navigation className="w-2.5 h-2.5 text-indigo-400" />
+                  <span className="text-slate-600">{geocodedAddress.coords}</span>
+                </div>
               </div>
             )}
           </div>
