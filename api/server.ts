@@ -519,7 +519,6 @@ app.get("/api/viability", async (req, res) => {
 
   try {
     // Haversine formula to calculate distance in KM
-    // 6371 is the earth radius in KM
     const result = await pool.query(`
       WITH cto_distances AS (
         SELECT 
@@ -544,14 +543,28 @@ app.get("/api/viability", async (req, res) => {
         WHERE c.latitude IS NOT NULL AND c.longitude IS NOT NULL
       )
       SELECT * FROM cto_distances
-      WHERE distance <= $3
       ORDER BY distance ASC
-    `, [latitude, longitude, radiusKm]);
+    `, [latitude, longitude]);
 
-    res.json(result.rows);
+    const allNearby = result.rows;
+    const withinRadius = allNearby.filter(c => c.distance <= radiusKm);
+    
+    // Stats for troubleshooting
+    const statsResult = await pool.query("SELECT COUNT(*) as total, COUNT(latitude) as with_gps FROM ctos");
+    const stats = statsResult.rows[0];
+
+    return res.json({
+      results: withinRadius,
+      closest: allNearby.length > 0 ? { name: allNearby[0].name, distance: allNearby[0].distance } : null,
+      stats: {
+        total_ctos: parseInt(stats.total),
+        ctos_with_gps: parseInt(stats.with_gps),
+        search_radius_km: radiusKm
+      }
+    });
   } catch (error: any) {
     console.error("Error in viability check:", error);
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 });
 

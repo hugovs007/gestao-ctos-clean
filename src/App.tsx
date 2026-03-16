@@ -1503,6 +1503,10 @@ function ViabilityCheck() {
   const [results, setResults] = useState<(any & { distance: number })[]>([]);
   const [searched, setSearched] = useState(false);
   const [geocodedAddress, setGeocodedAddress] = useState<{display: string, coords: string} | null>(null);
+  const [searchDiag, setSearchDiag] = useState<{
+    closest: { name: string, distance: number } | null,
+    stats: { total_ctos: number, ctos_with_gps: number, search_radius_km: number } | null
+  } | null>(null);
 
   // Build query from structured fields to keep main search bar synchronized
   const updateMainAddress = (newStructured: typeof structured) => {
@@ -1576,7 +1580,15 @@ function ViabilityCheck() {
       if (lat !== null && lng !== null) {
         const res = await fetch(`/api/viability?lat=${lat}&lng=${lng}&radius=${radius / 1000}`);
         const data = await res.json();
-        if (Array.isArray(data)) {
+        
+        if (data && data.results) {
+          setResults(data.results);
+          setSearchDiag({
+            closest: data.closest,
+            stats: data.stats
+          });
+        } else if (Array.isArray(data)) {
+          // Fallback for older API versions just in case
           setResults(data);
         }
       }
@@ -1897,11 +1909,34 @@ function ViabilityCheck() {
                   <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600">
                     <RefreshCw className="w-5 h-5" />
                   </div>
-                  <div>
-                    <p className="text-sm font-bold text-indigo-900 mb-1">Dica de Diagnóstico</p>
-                    <p className="text-xs text-indigo-800 leading-relaxed">
-                      Se você sabe que existem CTOs nesta cidade, verifique se elas possuem **coordenadas geográficas** (Latitude/Longitude) cadastradas. Caso contrário, elas não aparecerão na busca de viabilidade.
-                    </p>
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-indigo-900 mb-1">Diagnóstico do Banco de Dados</p>
+                    <div className="space-y-1.5 mt-2">
+                       {searchDiag && searchDiag.stats && (
+                         <>
+                           <div className="flex justify-between text-xs">
+                             <span className="text-indigo-700">Total de CTOs cadastradas:</span>
+                             <span className="font-bold text-indigo-900">{searchDiag.stats.total_ctos}</span>
+                           </div>
+                           <div className="flex justify-between text-xs">
+                             <span className="text-indigo-700">CTOs com GPS (visíveis na busca):</span>
+                             <span className="font-bold text-indigo-900">{searchDiag.stats.ctos_with_gps}</span>
+                           </div>
+                           <div className="flex justify-between text-xs border-t border-indigo-100 pt-1 mt-1">
+                             <span className="text-indigo-700">CTO mais próxima encontrada:</span>
+                             <span className="font-bold text-indigo-900">
+                               {searchDiag.closest ? `${(searchDiag.closest.distance * 1000).toFixed(0)}m` : 'Nenhuma'}
+                             </span>
+                           </div>
+                           {searchDiag.closest && (
+                             <p className="text-[10px] text-indigo-600 italic mt-1">
+                               * A CTO "{searchDiag.closest.name}" está fora do raio de {radius}m.
+                             </p>
+                           )}
+                         </>
+                       )}
+                       {!searchDiag && <p className="text-xs text-indigo-800">Carregando informações...</p>}
+                    </div>
                   </div>
                 </div>
               </div>
