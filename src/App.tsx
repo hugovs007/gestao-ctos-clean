@@ -1798,29 +1798,23 @@ function ViabilityCheck() {
         const data = await res.json();
         
         if (data && data.results) {
-          setResults(data.results.map((r: any) => ({
+          const inRadiusResults = (data.results as any[]).filter((r: any) => r.within_radius || false);
+          setResults(inRadiusResults.map((r: any) => ({
             ...r,
             distance: r.distance,
             within_radius: r.within_radius || false
           })));
           
-          if (data.results.length === 0 && data.closest) {
-            setSearchDiag(prev => ({
-              ...prev!,
-              closest: data.closest,
-              stats: data.stats,
-              currentCity: data.stats.search_city || structured.city
-            }));
-          } else {
-            setSearchDiag({
-              closest: data.closest,
-              stats: data.stats,
-              currentCity: data.stats.search_city || structured.city
-            });
-          }
+          const diag = {
+            closest: data.closest,
+            stats: data.stats,
+            currentCity: data.stats?.search_city || structured.city
+          };
+          setSearchDiag(diag);
         } else if (Array.isArray(data)) {
           // Fallback for older API versions just in case
           setResults(data);
+          setSearchDiag(null);
         }
       }
     } catch (error) {
