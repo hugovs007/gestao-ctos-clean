@@ -312,112 +312,177 @@ app.delete("/api/clients/:id", async (req, res) => {
 
 // Bulk Import
 app.post("/api/import", async (req, res) => {
-  const { rows } = req.body; 
+  const { rows } = req.body;
   if (!rows || !Array.isArray(rows)) return res.status(400).json({ error: "Invalid data" });
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
-    // 1. Process cities first (Batch & Case-Insensitive)
-    const cityNamesRaw = Array.from(new Set(rows.map(r => r.cidade.replace(/\s*\(Imp\.\)$/i, '').trim())));
-    const cityNamesLower = cityNamesRaw.map(n => n.toLowerCase());
-    
-    // Find cities that already exist (any casing)
-    const existingCitiesRes = await client.query(
-      "SELECT id, name FROM cities WHERE LOWER(name) = ANY($1)", 
-      [cityNamesLower]
-    );
-    
-    const cityIdMap = new Map<string, number>();
-    existingCitiesRes.rows.forEach(r => cityIdMap.set(r.name.toLowerCase(), r.id));
-    
-    // Identify cities that need to be created
-    const citiesToCreate = cityNamesRaw.filter(name => !cityIdMap.has(name.toLowerCase()));
-    
-    if (citiesToCreate.length > 0) {
-      // Insert new cities (normalizing to Uppercase for consistency)
-      const insertCitiesRes = await client.query(`
-        INSERT INTO cities (name)
-        SELECT DISTINCT UPPER(name) FROM UNNEST($1::text[]) as name
-        ON CONFLICT (name) DO NOTHING
-        RETURNING id, name
-      `, [citiesToCreate]);
-      
-      insertCitiesRes.rows.forEach(r => cityIdMap.set(r.name.toLowerCase(), r.id));
-    }
-    
-    // 2. Prepare CTO data
-    const ctoData: any[][] = rows.map(row => {
-      const cityNameClean = row.cidade.replace(/\s*\(Imp\.\)$/i, '').trim().toLowerCase();
-      const cityId = cityIdMap.get(cityNameClean);
-      
-      let ctoName = row.sigla && row.sigla !== '**' ? row.sigla : row.sigla_poste;
-      ctoName = ctoName?.trim() || 'Sem Nome';
-      
-      const location = row.endereco?.trim() || `${row.lat}, ${row.lng}`;
-      
-      // Try to parse lat/lng from row.lat/row.lng or address
-      let lat = parseFloat(row.lat);
-      let lng = parseFloat(row.lng);
-      
-      if (isNaN(lat) || isNaN(lng)) {
-        const coordsMatch = location.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
-        if (coordsMatch) {
-          lat = parseFloat(coordsMatch[1]);
-          lng = parseFloat(coordsMatch[2]);
-        }
+
+    // Detect format
+    const isBaseFormato = rows.length > 0 && 'city_id' in rows[0] && 'name' in rows[0];
+    let cityIdMap = new Map<number, boolean>();
+    let ctoData: any[][] = [];
+
+    if (isBaseFormato) {
+      const ids = Array.from(new Set(rows
+        .map((r: any) => { const id = Number(r.city_id); return Number.isFinite(id) ? id : null; })
+        .filter((v: any) => v !== null)));
+
+      if (ids.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Nenhum city_id válido na base' });
       }
 
-      return cityId ? [ctoName, cityId, location, 16, isNaN(lat) ? null : lat, isNaN(lng) ? null : lng] : null;
-    }).filter((r): r is any[] => r !== null);
+      const cityCheck = await client.query('SELECT id FROM cities WHERE id = ANY($1)', [ids]);
+      cityCheck.rows.forEach((r: any) => cityIdMap.set(r.id, true));
 
-      // 3. Batch insert CTOs using a temporary table for deduplication
-      if (ctoData.length > 0) {
-        // Create temp table to handle the batch logic
-        await client.query(`
-          CREATE TEMP TABLE temp_import_ctos (
-            name TEXT,
-            city_id INTEGER,
-            address TEXT,
-            total_ports INTEGER,
-            latitude DOUBLE PRECISION,
-            longitude DOUBLE PRECISION
-          ) ON COMMIT DROP
-        `);
-  
-        const values = [];
-        const params = [];
-        for (let i = 0; i < ctoData.length; i++) {
-          const offset = i * 6;
-          values.push(`($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6})`);
-          params.push(...ctoData[i]);
+      ctoData = rows.map((row: any) => {
+        const cityId = Number(row.city_id);
+        if (!cityIdMap.has(cityId)) return null;
+
+        const ctoName = (row.name || '').toString().trim();
+        if (!ctoName) return null;
+
+        const totalPorts = Number(row.total_ports) || 16;
+
+        let latitude = Number(row.latitude);
+        let longitude = Number(row.longitude);
+
+        const parseCoordsFromAddress = (a: any) => {
+          if (!a) return null;
+          const coordsMatch = a.toString().match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
+          if (!coordsMatch) return null;
+          return {
+            lat: Number(coordsMatch[1]),
+            lng: Number(coordsMatch[2])
+          };
+        };
+
+        const isCoordValid = (v: number, isLat = true) =>
+          Number.isFinite(v) && (isLat ? v >= -90 && v <= 90 : v >= -180 && v <= 180);
+
+        if (!isCoordValid(latitude, true) || !isCoordValid(longitude, false)) {
+          const parsed = parseCoordsFromAddress(row.address);
+          if (parsed) {
+            latitude = parsed.lat;
+            longitude = parsed.lng;
+          }
         }
-  
-        await client.query(`
-          INSERT INTO temp_import_ctos (name, city_id, address, total_ports, latitude, longitude)
-          VALUES ${values.join(',')}
-        `, params);
-  
-        // Insert into real table where NOT EXISTS (deduplication)
-        const insertRes = await client.query(`
-          INSERT INTO ctos (name, city_id, address, total_ports, latitude, longitude)
-          SELECT DISTINCT t.name, t.city_id, t.address, t.total_ports, t.latitude, t.longitude
-          FROM temp_import_ctos t
-          WHERE NOT EXISTS (
-            SELECT 1 FROM ctos c 
-            WHERE c.city_id = t.city_id AND c.name = t.name
-          )
-          RETURNING id
-        `);
-        
-        const importedCount = insertRes.rowCount || 0;
-        await client.query('COMMIT');
-        res.json({ success: true, count: importedCount });
+
+        return [
+          ctoName,
+          cityId,
+          row.address && row.address !== '#N/A' ? row.address.toString().trim() : null,
+          totalPorts,
+          isCoordValid(latitude, true) ? latitude : null,
+          isCoordValid(longitude, false) ? longitude : null,
+          row.type ? row.type.toString().trim() : 'residential'
+        ];
+      }).filter((r: any) => r !== null);
+
     } else {
-      await client.query('COMMIT');
-      res.json({ success: true, count: 0 });
+      // Existing geogrid import path (city names)
+      const cityNamesRaw = Array.from(new Set(rows.map((r: any) => (r.cidade || '').toString().replace(/\s*\(Imp\.\)$/i, '').trim())));
+      const cityNamesLower = cityNamesRaw.map((n: any) => n.toLowerCase());
+
+      const existingCitiesRes = await client.query(
+        "SELECT id, name FROM cities WHERE LOWER(name) = ANY($1)",
+        [cityNamesLower]
+      );
+
+      const cityIdMapTemp = new Map<string, number>();
+      existingCitiesRes.rows.forEach((r: any) => cityIdMapTemp.set(r.name.toLowerCase(), r.id));
+
+      const citiesToCreate = cityNamesRaw.filter((name: string) => !cityIdMapTemp.has(name.toLowerCase()));
+      if (citiesToCreate.length > 0) {
+        const insertCitiesRes = await client.query(`
+          INSERT INTO cities (name)
+          SELECT DISTINCT UPPER(name) FROM UNNEST($1::text[]) as name
+          ON CONFLICT (name) DO NOTHING
+          RETURNING id, name
+        `, [citiesToCreate]);
+
+        insertCitiesRes.rows.forEach((r: any) => cityIdMapTemp.set(r.name.toLowerCase(), r.id));
+      }
+
+      ctoData = rows.map((row: any) => {
+        const cityNameClean = (row.cidade || '').toString().replace(/\s*\(Imp\.\)$/i, '').trim().toLowerCase();
+        const cityId = cityIdMapTemp.get(cityNameClean);
+        if (!cityId) return null;
+
+        let ctoName = row.sigla && row.sigla !== '**' ? row.sigla : row.sigla_poste;
+        ctoName = (ctoName || 'Sem Nome').toString().trim();
+        const location = (row.endereco || '').toString().trim() || `${row.lat}, ${row.lng}`;
+
+        let lat = Number(row.lat);
+        let lng = Number(row.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          const coordsMatch = location.toString().match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
+          if (coordsMatch) {
+            lat = Number(coordsMatch[1]);
+            lng = Number(coordsMatch[2]);
+          }
+        }
+
+        return [
+          ctoName,
+          cityId,
+          row.endereco || location || null,
+          Number(row.total_ports) || 16,
+          Number.isFinite(lat) ? lat : null,
+          Number.isFinite(lng) ? lng : null,
+          (row.type || 'residential').toString().trim()
+        ];
+      }).filter((r: any) => r !== null);
     }
+
+    if (ctoData.length === 0) {
+      await client.query('ROLLBACK');
+      return res.json({ success: true, count: 0 });
+    }
+
+    // Insert in batch with dedupe
+    await client.query(`
+      CREATE TEMP TABLE temp_import_ctos (
+        name TEXT,
+        city_id INTEGER,
+        address TEXT,
+        total_ports INTEGER,
+        latitude DOUBLE PRECISION,
+        longitude DOUBLE PRECISION,
+        type TEXT
+      ) ON COMMIT DROP
+    `);
+
+    const values = [];
+    const params = [];
+    for (let i = 0; i < ctoData.length; i++) {
+      const offset = i * 7;
+      values.push(`($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`);
+      params.push(...ctoData[i]);
+    }
+
+    await client.query(`
+      INSERT INTO temp_import_ctos (name, city_id, address, total_ports, latitude, longitude, type)
+      VALUES ${values.join(',')}
+    `, params);
+
+    const insertRes = await client.query(`
+      INSERT INTO ctos (name, city_id, address, total_ports, latitude, longitude, type)
+      SELECT DISTINCT t.name, t.city_id, t.address, t.total_ports, t.latitude, t.longitude, t.type
+      FROM temp_import_ctos t
+      WHERE NOT EXISTS (
+        SELECT 1 FROM ctos c
+        WHERE c.city_id = t.city_id AND c.name = t.name
+      )
+      RETURNING id
+    `);
+
+    const importedCount = insertRes.rowCount || 0;
+    await client.query('COMMIT');
+    res.json({ success: true, count: importedCount });
+
   } catch (error: any) {
     await client.query('ROLLBACK');
     console.error("Import error:", error);

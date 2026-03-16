@@ -522,19 +522,81 @@ function Dashboard() {
                   if (!importText.trim()) return;
                   setIsImporting(true);
                   try {
-                    const lines = importText.split('\n');
-                    const rows = lines.map(line => {
-                      const cols = line.split('\t');
-                      if (cols.length < 17) return null;
+                    const lines = importText.trim().split('\n').map(l => l.trim()).filter(Boolean);
+                    if (lines.length === 0) {
+                      alert('Nenhum dado encontrado para importar.');
+                      return;
+                    }
+
+                    const detectColumns = (firstLine: string) => {
+                      const headers = firstLine.split('\t').map(h => h.trim().toLowerCase());
                       return {
-                        sigla: cols[1],
-                        sigla_poste: cols[2],
-                        lat: cols[5],
-                        lng: cols[6],
-                        endereco: cols[13],
-                        cidade: cols[16]
+                        isNewSchema: headers.includes('city_id') && headers.includes('name'),
+                        isOldSchema: headers.includes('cidade') && headers.includes('sigla'),
+                        maybeNewSchemaWithoutHeader: headers.length >= 8 && !isNaN(Number(headers[0])) && headers[1] && headers[2],
                       };
-                    }).filter(r => r && r.cidade && r.cidade !== 'Cidade');
+                    };
+
+                    const headerInfo = detectColumns(lines[0]);
+                    const rows = lines.map((line, index) => {
+                      const cols = line.split('\t');
+
+                      // Skip header row
+                      if (index === 0 && (headerInfo.isNewSchema || headerInfo.isOldSchema)) {
+                        return null;
+                      }
+
+                      if (headerInfo.isNewSchema || (index === 0 && headerInfo.maybeNewSchemaWithoutHeader && cols.length >= 8)) {
+                        const row = {} as any;
+                        if (headerInfo.isNewSchema) {
+                          const keys = lines[0].split('\t').map(k => k.trim().toLowerCase());
+                          cols.forEach((value, i) => {
+                            row[keys[i]] = value.trim();
+                          });
+                        } else {
+                          row.id = cols[0]?.trim();
+                          row.name = cols[1]?.trim();
+                          row.city_id = cols[2]?.trim();
+                          row.total_ports = cols[3]?.trim();
+                          row.address = cols[4]?.trim();
+                          row.latitude = cols[5]?.trim();
+                          row.longitude = cols[6]?.trim();
+                          row.type = cols[7]?.trim();
+                        }
+
+                        if (!row.city_id || !row.name) return null;
+                        return {
+                          name: row.name,
+                          city_id: Number(row.city_id),
+                          total_ports: Number(row.total_ports) || 16,
+                          address: row.address || null,
+                          latitude: row.latitude || null,
+                          longitude: row.longitude || null,
+                          type: row.type || 'residential'
+                        };
+                      }
+
+                      if (headerInfo.isOldSchema || cols.length >= 17) {
+                        const sigla = cols[1] || '';
+                        const sigla_poste = cols[2] || '';
+                        const lat = cols[5] || '';
+                        const lng = cols[6] || '';
+                        const endereco = cols[13] || '';
+                        const cidade = cols[16] || '';
+                        if (!cidade || cidade.toLowerCase() === 'cidade') return null;
+
+                        return {
+                          sigla,
+                          sigla_poste,
+                          lat,
+                          lng,
+                          endereco,
+                          cidade
+                        };
+                      }
+
+                      return null;
+                    }).filter(r => r !== null);
 
                     if (rows.length === 0) {
                       alert('Nenhum dado válido encontrado.');
