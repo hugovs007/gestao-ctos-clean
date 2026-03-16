@@ -613,6 +613,50 @@ app.get("/api/viability", async (req, res) => {
   }
 });
 
+// Walking Route (OSRM)
+app.get("/api/route", async (req, res) => {
+  const { fromLat, fromLng, toLat, toLng, mode } = req.query;
+  if (!fromLat || !fromLng || !toLat || !toLng) {
+    return res.status(400).json({ error: "Parâmetros fromLat, fromLng, toLat e toLng são obrigatórios" });
+  }
+
+  const fromLatNum = parseFloat(fromLat as string);
+  const fromLngNum = parseFloat(fromLng as string);
+  const toLatNum = parseFloat(toLat as string);
+  const toLngNum = parseFloat(toLng as string);
+
+  if (Number.isNaN(fromLatNum) || Number.isNaN(fromLngNum) || Number.isNaN(toLatNum) || Number.isNaN(toLngNum)) {
+    return res.status(400).json({ error: "Coordenadas inválidas" });
+  }
+
+  const profile = (mode === 'driving' || mode === 'cycling') ? mode : 'walking';
+  const url = `https://router.project-osrm.org/route/v1/${profile}/${fromLngNum},${fromLatNum};${toLngNum},${toLatNum}?overview=full&geometries=geojson&steps=true`; 
+
+  try {
+    const routeRes = await fetch(url, { headers: { 'User-Agent': 'GestaoCTOs/1.0' } });
+    if (!routeRes.ok) {
+      return res.status(502).json({ error: `Erro ao obter rota de ${profile}` });
+    }
+
+    const routeData = await routeRes.json() as any;
+    if (!routeData || routeData.code !== 'Ok' || !routeData.routes?.length) {
+      return res.status(404).json({ error: 'Rota não encontrada' });
+    }
+
+    const selected = routeData.routes[0];
+    return res.json({
+      distance: selected.distance,
+      duration: selected.duration,
+      geometry: selected.geometry,
+      legs: selected.legs,
+      profile
+    });
+  } catch (error: any) {
+    console.error('Erro ao calcular rota:', error);
+    res.status(500).json({ error: 'Erro interno no cálculo de rota' });
+  }
+});
+
 // Geocoding
 app.get("/api/geocode", async (req, res) => {
   const { q, street, city, state } = req.query;

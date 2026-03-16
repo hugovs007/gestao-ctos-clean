@@ -1554,7 +1554,11 @@ function ViabilityCheck() {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<(any & { distance: number })[]>([]);
   const [searched, setSearched] = useState(false);
-  const [geocodedAddress, setGeocodedAddress] = useState<{display: string, coords: string} | null>(null);
+  const [geocodedAddress, setGeocodedAddress] = useState<{display: string, coords: string, lat: number, lng: number} | null>(null);
+  const [selectedCtoForRoute, setSelectedCtoForRoute] = useState<any | null>(null);
+  const [routeInfo, setRouteInfo] = useState<{distance:number, duration:number, geometry:any, legs:any[]} | null>(null);
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [routeError, setRouteError] = useState<string | null>(null);
   const [searchDiag, setSearchDiag] = useState<{
     closest: { name: string, distance: number } | null,
     stats: { total_ctos: number, ctos_with_gps: number, search_radius_km: number, search_city?: string } | null,
@@ -1585,6 +1589,9 @@ function ViabilityCheck() {
     setLoading(true);
     setSearched(true);
     setResults([]);
+    setSelectedCtoForRoute(null);
+    setRouteInfo(null);
+    setRouteError(null);
 
     try {
       let lat: number | null = null;
@@ -1594,7 +1601,7 @@ function ViabilityCheck() {
       if (coordsMatch) {
         lat = parseFloat(coordsMatch[1]);
         lng = parseFloat(coordsMatch[2]);
-        setGeocodedAddress({ display: "Coordenadas inseridas", coords: `${lat.toFixed(6)}, ${lng.toFixed(6)}` });
+        setGeocodedAddress({ display: "Coordenadas inseridas", coords: `${lat.toFixed(6)}, ${lng.toFixed(6)}`, lat, lng });
       } else {
         // Prepare structured params
         const params = new URLSearchParams();
@@ -1610,7 +1617,9 @@ function ViabilityCheck() {
           lng = geoData.lng;
           setGeocodedAddress({ 
             display: geoData.display_name || "Localização encontrada", 
-            coords: `${lat?.toFixed(6)}, ${lng?.toFixed(6)}` 
+            coords: `${lat?.toFixed(6)}, ${lng?.toFixed(6)}` ,
+            lat: lat!,
+            lng: lng!
           });
           
           if (geoData.details) {
@@ -1707,7 +1716,7 @@ function ViabilityCheck() {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
         setAddress(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
-        setGeocodedAddress({ display: "Sua localização atual", coords: `${lat.toFixed(6)}, ${lng.toFixed(6)}` });
+        setGeocodedAddress({ display: "Sua localização atual", coords: `${lat.toFixed(6)}, ${lng.toFixed(6)}`, lat, lng });
         
         try {
           const res = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`);
@@ -1735,6 +1744,36 @@ function ViabilityCheck() {
         setLoading(false);
       }
     );
+  };
+
+  const handleRouteToCTO = async (cto: any) => {
+    if (!geocodedAddress) {
+      setRouteError("Origem não definida. Faça a busca de viabilidade primeiro.");
+      return;
+    }
+
+    setSelectedCtoForRoute(cto);
+    setRouteError(null);
+    setRouteInfo(null);
+    setRouteLoading(true);
+
+    try {
+      const routeRes = await fetch(`/api/route?fromLat=${encodeURIComponent(geocodedAddress.lat.toString())}&fromLng=${encodeURIComponent(geocodedAddress.lng.toString())}&toLat=${encodeURIComponent(cto.latitude)}&toLng=${encodeURIComponent(cto.longitude)}&mode=walking`);
+
+      if (!routeRes.ok) {
+        const data = await routeRes.json().catch(() => null);
+        setRouteError(data?.error || 'Falha ao obter rota');
+        return;
+      }
+
+      const routeData = await routeRes.json();
+      setRouteInfo(routeData);
+    } catch (err) {
+      console.error('Falha ao buscar rota:', err);
+      setRouteError('Falha de conexão ao buscar rota');
+    } finally {
+      setRouteLoading(false);
+    }
   };
 
   return (
@@ -2091,20 +2130,32 @@ function ViabilityCheck() {
                             </div>
                           </div>
 
-                          <div className="flex flex-row md:flex-col items-center md:items-end gap-4 md:gap-1">
+                          <div className="flex flex-row md:flex-col items-center md:items-end gap-2 md:gap-1">
                             <div className="text-right">
                               <div className={cn("text-lg font-bold", isFull ? "text-red-600" : "text-emerald-600")}>
                                 {availablePorts} / {cto.total_ports}
                               </div>
                               <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Portas Livres</div>
                             </div>
-                            {!isFull && (
-                              <Link to={`/cto/${cto.id}`}>
-                                <Button variant="ghost" className="text-indigo-600 hover:text-indigo-700 p-0 h-auto font-bold text-xs uppercase flex items-center gap-1">
-                                  Gerenciar <ArrowLeft className="w-3 h-3 rotate-180" />
-                                </Button>
-                              </Link>
-                            )}
+                            <div className="flex flex-wrap gap-1 items-center justify-end">
+                              <Button
+                                variant={selectedCtoForRoute?.id === cto.id ? 'secondary' : 'ghost'}
+                                className="text-indigo-700 hover:text-indigo-900 text-xs uppercase"
+                                onClick={() => handleRouteToCTO(cto)}
+                                disabled={routeLoading || isFull}
+                                title={isFull ? 'CTO sem portas disponíveis' : 'Traçar rota a pé para esta CTO'}
+                              >
+                                {routeLoading && selectedCtoForRoute?.id === cto.id ? 'Traçando...' : 'Traçar rota'}
+                              </Button>
+
+                              {!isFull && (
+                                <Link to={`/cto/${cto.id}`}>
+                                  <Button variant="ghost" className="text-indigo-600 hover:text-indigo-700 p-0 h-auto font-bold text-xs uppercase flex items-center gap-1">
+                                    Gerenciar <ArrowLeft className="w-3 h-3 rotate-180" />
+                                  </Button>
+                                </Link>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </Card>
@@ -2112,6 +2163,51 @@ function ViabilityCheck() {
                   })}
                 </div>
               )}
+
+              {routeError && (
+                <Card className="p-4 border border-rose-200 bg-rose-50 text-rose-700">
+                  <div className="font-bold text-sm">Erro ao traçar rota</div>
+                  <div className="text-xs mt-1">{routeError}</div>
+                </Card>
+              )}
+
+              {routeInfo && selectedCtoForRoute && (
+                <Card className="p-4 border border-indigo-200 bg-indigo-50">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-bold text-indigo-800">Rota a pé: {selectedCtoForRoute.name}</h4>
+                      <p className="text-xs text-slate-600">
+                        Origem: {geocodedAddress?.display} ({geocodedAddress?.coords}) • Destino: {selectedCtoForRoute.address || `${selectedCtoForRoute.latitude}, ${selectedCtoForRoute.longitude}`}
+                      </p>
+                    </div>
+                    <a
+                      href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(`${geocodedAddress?.lat},${geocodedAddress?.lng}`)}&destination=${encodeURIComponent(`${selectedCtoForRoute.latitude},${selectedCtoForRoute.longitude}`)}&travelmode=walking`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-indigo-700 font-bold hover:text-indigo-800"
+                    >
+                      Abrir no Google Maps ↗
+                    </a>
+                  </div>
+
+                  <div className="mt-3 text-xs text-slate-700">
+                    Distância: {(routeInfo.distance / 1000).toFixed(2)} km • Duração: {(routeInfo.duration / 60).toFixed(0)} min
+                  </div>
+
+                  {routeInfo.legs?.[0]?.steps?.length ? (
+                    <div className="mt-2 text-xs text-slate-600 space-y-1 max-h-48 overflow-y-auto">
+                      {routeInfo.legs[0].steps.map((step: any, idx: number) => (
+                        <div key={idx} className="border-b border-slate-100 pb-1">
+                          • {step.maneuver?.instruction || step.name || 'Siga em frente'} — {(step.distance).toFixed(0)} m
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs text-slate-500">Instruções detalhadas não disponíveis.</p>
+                  )}
+                </Card>
+              )}
+
             </div>
           )}
         </div>
