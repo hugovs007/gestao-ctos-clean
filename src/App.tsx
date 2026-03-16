@@ -1454,7 +1454,7 @@ function ViabilityCheck() {
     state: '',
     zipCode: ''
   });
-  const [radius, setRadius] = useState(0.5); // Default 0.5km
+  const [radius, setRadius] = useState(500); // Default 500m
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<(any & { distance: number })[]>([]);
   const [searched, setSearched] = useState(false);
@@ -1517,7 +1517,7 @@ function ViabilityCheck() {
       }
 
       if (lat !== null && lng !== null) {
-        const res = await fetch(`/api/viability?lat=${lat}&lng=${lng}&radius=${radius}`);
+        const res = await fetch(`/api/viability?lat=${lat}&lng=${lng}&radius=${radius / 1000}`);
         const data = await res.json();
         if (Array.isArray(data)) {
           setResults(data);
@@ -1740,21 +1740,21 @@ function ViabilityCheck() {
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-3 flex justify-between">
                 <span>Raio de busca</span>
-                <span className="text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded text-xs">{radius}km</span>
+                <span className="text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded text-xs">{radius}m</span>
               </label>
               <input
                 type="range"
-                min="0.1"
-                max="3.0"
-                step="0.1"
+                min="100"
+                max="3000"
+                step="100"
                 className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                 value={radius}
                 onChange={(e) => setRadius(parseFloat(e.target.value))}
               />
               <div className="flex justify-between text-[10px] text-slate-400 mt-2 font-medium">
-                <span>0.1km</span>
-                <span>1.5km</span>
-                <span>3.0km</span>
+                <span>100m</span>
+                <span>1500m</span>
+                <span>3000m</span>
               </div>
             </div>
 
@@ -1804,7 +1804,7 @@ function ViabilityCheck() {
                           <h4 className="font-bold text-lg text-slate-900">{cto.name}</h4>
                           <p className="text-sm text-slate-500 flex items-center gap-1">
                             <Navigation className="w-3 h-3" />
-                            {cto.distance.toFixed(3)} km de distância
+                            {Math.round(cto.distance * 1000)}m de distância
                           </p>
                           <AddressDisplay address={cto.address} className="text-xs mt-1" />
                         </div>
