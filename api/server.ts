@@ -416,6 +416,34 @@ app.get("/api/viability", async (req, res) => {
   }
 });
 
+// Geocoding
+app.get("/api/geocode", async (req, res) => {
+  const { q } = req.query;
+  if (!q) return res.status(400).json({ error: "Endereço é obrigatório" });
+
+  try {
+    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q as string)}&limit=1`, {
+      headers: {
+        'User-Agent': 'GestaoCTOs/1.0'
+      }
+    });
+    const data = await response.json() as any[];
+    
+    if (data && data.length > 0) {
+      res.json({
+        lat: parseFloat(data[0].lat),
+        lng: parseFloat(data[0].lon),
+        display_name: data[0].display_name
+      });
+    } else {
+      res.status(404).json({ error: "Endereço não encontrado" });
+    }
+  } catch (error: any) {
+    console.error("Geocoding error:", error);
+    res.status(500).json({ error: "Erro ao buscar coordenadas" });
+  }
+});
+
 // Search
 app.get("/api/search", async (req, res) => {
   try {

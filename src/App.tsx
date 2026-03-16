@@ -1457,6 +1457,7 @@ function ViabilityCheck() {
 
     setLoading(true);
     setSearched(true);
+    setResults([]);
 
     try {
       let lat: number | null = null;
@@ -1468,15 +1469,33 @@ function ViabilityCheck() {
         lat = parseFloat(coordsMatch[1]);
         lng = parseFloat(coordsMatch[2]);
       } else {
-        alert("Por favor, insira as coordenadas no formato 'latitude, longitude' (ex: -6.870, -36.910).");
-        setLoading(false);
-        return;
+        // Try geocoding
+        try {
+          const geoRes = await fetch(`/api/geocode?q=${encodeURIComponent(address)}`);
+          if (geoRes.ok) {
+            const geoData = await geoRes.json();
+            lat = geoData.lat;
+            lng = geoData.lng;
+            // Optional: setAddress(geoData.display_name); // Don't overwrite yet to avoid confusion
+          } else {
+            alert("Endereço não localizado. Tente usar coordenadas (lat, lng).");
+            setLoading(false);
+            return;
+          }
+        } catch (err) {
+          console.error("Geocoding failed", err);
+          alert("Erro ao buscar endereço. Tente novamente.");
+          setLoading(false);
+          return;
+        }
       }
 
-      const res = await fetch(`/api/viability?lat=${lat}&lng=${lng}&radius=${radius}`);
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setResults(data);
+      if (lat !== null && lng !== null) {
+        const res = await fetch(`/api/viability?lat=${lat}&lng=${lng}&radius=${radius}`);
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setResults(data);
+        }
       }
     } catch (error) {
       console.error("Failed to fetch viability", error);
@@ -1511,7 +1530,7 @@ function ViabilityCheck() {
         <form onSubmit={handleSearch} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Coordenadas (Lat, Lng)</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Endereço ou Coordenadas (Lat, Lng)</label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -1519,7 +1538,7 @@ function ViabilityCheck() {
                   </div>
                   <input
                     type="text"
-                    placeholder="Ex: -6.8893, -36.9112"
+                    placeholder="Ex: Rua Tal, 123 ou -6.8893, -36.9112"
                     className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
