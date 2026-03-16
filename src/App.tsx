@@ -150,6 +150,7 @@ function Dashboard() {
     ctos: [] as Array<{ id: number; name: string; total_ports: number; used_ports: number }> ,
     client_statuses: [] as Array<{ status: string; count: number }>
   });
+  const [statsError, setStatsError] = useState<string | null>(null);
   
   // Unit Management
   const [showUnitModal, setShowUnitModal] = useState(false);
@@ -169,10 +170,22 @@ function Dashboard() {
   const fetchStats = async () => {
     try {
       const res = await fetch('/api/stats');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setDashboardStats(data);
+      setDashboardStats((prev) => ({
+        total_units: typeof data.total_units === 'number' ? data.total_units : prev.total_units,
+        total_cities: typeof data.total_cities === 'number' ? data.total_cities : prev.total_cities,
+        total_ctos: typeof data.total_ctos === 'number' ? data.total_ctos : prev.total_ctos,
+        total_clients: typeof data.total_clients === 'number' ? data.total_clients : prev.total_clients,
+        units: Array.isArray(data.units) ? data.units : prev.units,
+        cities: Array.isArray(data.cities) ? data.cities : prev.cities,
+        ctos: Array.isArray(data.ctos) ? data.ctos : prev.ctos,
+        client_statuses: Array.isArray(data.client_statuses) ? data.client_statuses : prev.client_statuses,
+      }));
+      setStatsError(null);
     } catch (error) {
       console.error('Failed to fetch dashboard stats', error);
+      setStatsError('Não foi possível carregar estatísticas do banco. Verifique a API.');
     }
   };
 
@@ -335,6 +348,12 @@ function Dashboard() {
 
       {activeTab === 'dashboard' ? (
         <div className="space-y-4">
+          {statsError && (
+            <Card className="p-4 border border-rose-200 bg-rose-50 text-rose-700">
+              <div className="font-bold">Erro de estatísticas</div>
+              <div className="text-sm">{statsError}</div>
+            </Card>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
             <Card className="p-4 bg-sky-100 border border-sky-200">
               <span className="text-xs text-sky-700 uppercase font-bold">Unidades</span>

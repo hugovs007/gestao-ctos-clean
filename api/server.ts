@@ -553,7 +553,7 @@ app.get("/api/viability", async (req, res) => {
       SELECT column_name FROM information_schema.columns
       WHERE table_name='ctos' and column_name='type'
     `);
-    const hasTypeColumn = typeInfo.rowCount > 0;
+    const hasTypeColumn = (typeInfo.rowCount ?? 0) > 0;
 
     let queryText = `
       WITH cto_distances AS (
