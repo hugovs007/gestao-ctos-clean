@@ -51,7 +51,8 @@ export const initializeDb = async () => {
         total_ports INTEGER NOT NULL DEFAULT 16,
         address TEXT,
         latitude DOUBLE PRECISION,
-        longitude DOUBLE PRECISION
+        longitude DOUBLE PRECISION,
+        type TEXT DEFAULT 'residential' CHECK (type IN ('residential', 'condominium'))
       );
 
       CREATE TABLE IF NOT EXISTS clients (
@@ -68,6 +69,7 @@ export const initializeDb = async () => {
       );
 
       CREATE INDEX IF NOT EXISTS idx_ctos_coords ON ctos (latitude, longitude) WHERE latitude IS NOT NULL AND longitude IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_ctos_type ON ctos (type);
     `);
     
     // Migrations logic
@@ -79,6 +81,16 @@ export const initializeDb = async () => {
     `);
     if (pppoeRes.rowCount === 0) {
       await client.query("ALTER TABLE clients ADD COLUMN pppoe TEXT");
+    }
+
+    // Check if type column exists in ctos
+    const typeRes = await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='ctos' AND column_name='type';
+    `);
+    if (typeRes.rowCount === 0) {
+      await client.query("ALTER TABLE ctos ADD COLUMN type TEXT DEFAULT 'residential' CHECK (type IN ('residential', 'condominium'))");
     }
 
     // Check if latitude/longitude columns exist in ctos

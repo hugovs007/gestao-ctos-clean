@@ -163,7 +163,7 @@ app.get("/api/cities/:cityId/ctos", async (req, res) => {
 });
 
 app.post("/api/ctos", async (req, res) => {
-  let { name, city_id, total_ports, address, latitude, longitude } = req.body;
+  let { name, city_id, total_ports, address, latitude, longitude, type } = req.body;
   
   try {
     // Auto-geocode if coordinates are missing but address is present
@@ -176,10 +176,10 @@ app.post("/api/ctos", async (req, res) => {
     }
 
     const result = await pool.query(
-      "INSERT INTO ctos (name, city_id, total_ports, address, latitude, longitude) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-      [name, city_id, total_ports || 16, address, latitude || null, longitude || null]
+      "INSERT INTO ctos (name, city_id, total_ports, address, latitude, longitude, type) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+      [name, city_id, total_ports || 16, address, latitude || null, longitude || null, type || 'residential']
     );
-    res.json({ id: result.rows[0].id, name, city_id, total_ports, address, latitude, longitude });
+    res.json({ id: result.rows[0].id, name, city_id, total_ports, address, latitude, longitude, type: type || 'residential' });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }
@@ -523,7 +523,7 @@ async function geocodeAddress(q: string, street?: string, city?: string, state?:
 
 // Viability Check
 app.get("/api/viability", async (req, res) => {
-  const { lat, lng, radius, city_id, city_name } = req.query;
+  const { lat, lng, radius, city_id, city_name, customer_type } = req.query;
   
   if (!lat || !lng) {
     return res.status(400).json({ error: "Latitude e Longitude são obrigatórias" });
@@ -533,11 +533,11 @@ app.get("/api/viability", async (req, res) => {
   const longitude = parseFloat(lng as string);
   const radiusKm = parseFloat(radius as string) || 1.0;
   let targetCityId: number | null = city_id ? parseInt(city_id as string) : null;
+  const targetType = (customer_type as string) || 'residential';
 
   try {
-    // If city_name is provided but no city_id, try to find the city
+    // ... city searching logic ...
     if (!targetCityId && city_name) {
-      // Try exact match first, then partial match
       const cityRes = await pool.query(
         "SELECT id FROM cities WHERE $1 ILIKE '%' || name || '%' OR name ILIKE '%' || $1 || '%'",
         [city_name as string]
@@ -570,13 +570,16 @@ app.get("/api/viability", async (req, res) => {
           GROUP BY cto_id
         ) stats ON c.id = stats.cto_id
         WHERE c.latitude IS NOT NULL AND c.longitude IS NOT NULL
+        AND c.type = $3
     `;
 
-    const queryParams: any[] = [latitude, longitude];
+    const queryParams: any[] = [latitude, longitude, targetType];
+    let paramIndex = 4;
 
     if (targetCityId) {
-      queryText += ` AND c.city_id = $3`;
+      queryText += ` AND c.city_id = $${paramIndex}`;
       queryParams.push(targetCityId);
+      paramIndex++;
     }
 
     queryText += `

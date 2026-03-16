@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Plus, Server, MapPin, Users, Search, ArrowLeft, Trash2, Edit2, CheckCircle, XCircle, ExternalLink, AlertTriangle, ChevronDown, Navigation, Locate, Filter, Map, RefreshCw } from 'lucide-react';
+import { Plus, Server, MapPin, Users, Search, ArrowLeft, Trash2, Edit2, CheckCircle, XCircle, ExternalLink, AlertTriangle, ChevronDown, Navigation, Locate, Filter, Map, RefreshCw, Home, Building2 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { Unit, City, CTO, Client } from './types.js';
@@ -666,6 +666,7 @@ function CityView() {
   const [newCTOName, setNewCTOName] = useState('');
   const [newCTOAddress, setNewCTOAddress] = useState('');
   const [newCTOPorts, setNewCTOPorts] = useState(16);
+  const [newCTOType, setNewCTOType] = useState<'residential' | 'condominium'>('residential');
 
   // City Editing
   const [units, setUnits] = useState<Unit[]>([]);
@@ -789,12 +790,14 @@ function CityView() {
           address: newCTOAddress,
           total_ports: newCTOPorts,
           city_id: Number(id),
+          type: newCTOType,
         }),
       });
       if (res.ok) {
         setNewCTOName('');
         setNewCTOAddress('');
         setNewCTOPorts(16);
+        setNewCTOType('residential');
         fetchCTOs();
         setActiveTab('ctos');
       }
@@ -1547,6 +1550,7 @@ function ViabilityCheck() {
     zipCode: ''
   });
   const [radius, setRadius] = useState(500); // Default 500m
+  const [customerType, setCustomerType] = useState<'residential' | 'condominium'>('residential');
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<(any & { distance: number })[]>([]);
   const [searched, setSearched] = useState(false);
@@ -1632,7 +1636,7 @@ function ViabilityCheck() {
           cityParam = `&city_name=${encodeURIComponent(structured.city)}`;
         }
         
-        const res = await fetch(`/api/viability?lat=${lat}&lng=${lng}&radius=${radius / 1000}${cityParam}`);
+        const res = await fetch(`/api/viability?lat=${lat}&lng=${lng}&radius=${radius / 1000}&customer_type=${customerType}${cityParam}`);
         const data = await res.json();
         
         if (data && data.results) {
@@ -1925,7 +1929,39 @@ function ViabilityCheck() {
               </div>
             </div>
 
-            <div className="flex items-end">
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-3">Tipo de Cliente</label>
+              <div className="flex p-1 bg-slate-100 rounded-xl gap-1">
+                <button
+                  type="button"
+                  onClick={() => setCustomerType('residential')}
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all",
+                    customerType === 'residential' 
+                      ? "bg-white text-indigo-600 shadow-sm" 
+                      : "text-slate-500 hover:text-slate-700"
+                  )}
+                >
+                  <Home className="w-4 h-4" />
+                  Residencial
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomerType('condominium')}
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all",
+                    customerType === 'condominium' 
+                      ? "bg-white text-indigo-600 shadow-sm" 
+                      : "text-slate-500 hover:text-slate-700"
+                  )}
+                >
+                  <Building2 className="w-4 h-4" />
+                  Condomínio
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-end md:col-span-2">
               <Button type="submit" className="w-full h-[52px] font-bold text-xl shadow-lg shadow-indigo-100 hover:shadow-indigo-200 transition-all transform hover:-translate-y-0.5 active:translate-y-0" disabled={loading}>
                 {loading ? (
                   <div className="flex items-center gap-2">
@@ -2036,7 +2072,17 @@ function ViabilityCheck() {
                               <Server className="w-6 h-6" />
                             </div>
                             <div>
-                              <h4 className="font-bold text-lg text-slate-900">{cto.name}</h4>
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-bold text-lg text-slate-900">{cto.name}</h4>
+                                <span className={cn(
+                                  "text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider",
+                                  cto.type === 'condominium' 
+                                    ? "bg-amber-100 text-amber-700" 
+                                    : "bg-emerald-100 text-emerald-700"
+                                )}>
+                                  {cto.type === 'condominium' ? 'Condomínio' : 'Residencial'}
+                                </span>
+                              </div>
                               <p className="text-sm text-slate-500 flex items-center gap-1">
                                 <Navigation className="w-3 h-3" />
                                 {Math.round(cto.distance * 1000)}m de distância
