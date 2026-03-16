@@ -1,5 +1,5 @@
 import express from "express";
-import pool from "./db.js";
+import pool, { initializeDb } from "./db.js";
 
 const app = express();
 
@@ -17,6 +17,27 @@ app.get("/api/cities", async (req, res) => {
     res.json(result.rows);
   } catch (error: any) {
     console.error("Error fetching cities:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/stats", async (req, res) => {
+  try {
+    const [unitsCountRes, citiesCountRes, ctosCountRes, clientsCountRes] = await Promise.all([
+      pool.query("SELECT COUNT(*) AS count FROM units"),
+      pool.query("SELECT COUNT(*) AS count FROM cities"),
+      pool.query("SELECT COUNT(*) AS count FROM ctos"),
+      pool.query("SELECT COUNT(*) AS count FROM clients")
+    ]);
+
+    res.json({
+      total_units: parseInt(unitsCountRes.rows[0]?.count || '0'),
+      total_cities: parseInt(citiesCountRes.rows[0]?.count || '0'),
+      total_ctos: parseInt(ctosCountRes.rows[0]?.count || '0'),
+      total_clients: parseInt(clientsCountRes.rows[0]?.count || '0')
+    });
+  } catch (error: any) {
+    console.error('Error fetching stats:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -69,7 +69,6 @@ export const initializeDb = async () => {
       );
 
       CREATE INDEX IF NOT EXISTS idx_ctos_coords ON ctos (latitude, longitude) WHERE latitude IS NOT NULL AND longitude IS NOT NULL;
-      CREATE INDEX IF NOT EXISTS idx_ctos_type ON ctos (type);
     `);
     
     // Migrations logic
@@ -91,6 +90,15 @@ export const initializeDb = async () => {
     `);
     if (typeRes.rowCount === 0) {
       await client.query("ALTER TABLE ctos ADD COLUMN type TEXT DEFAULT 'residential' CHECK (type IN ('residential', 'condominium'))");
+    }
+
+    // Create type index when type column exists
+    if ((await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='ctos' AND column_name='type'
+    `)).rowCount > 0) {
+      await client.query("CREATE INDEX IF NOT EXISTS idx_ctos_type ON ctos (type)");
     }
 
     // Check if latitude/longitude columns exist in ctos

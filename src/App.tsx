@@ -136,10 +136,11 @@ function Dashboard() {
   const [newCityName, setNewCityName] = useState('');
   const [newCityUnitId, setNewCityUnitId] = useState<string>('');
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('cities');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
+  const [dashboardStats, setDashboardStats] = useState({ total_units: 0, total_cities: 0, total_ctos: 0, total_clients: 0 });
   
   // Unit Management
   const [showUnitModal, setShowUnitModal] = useState(false);
@@ -156,9 +157,19 @@ function Dashboard() {
     fetchData();
   }, []);
 
+  const fetchStats = async () => {
+    try {
+      const res = await fetch('/api/stats');
+      const data = await res.json();
+      setDashboardStats(data);
+    } catch (error) {
+      console.error('Failed to fetch dashboard stats', error);
+    }
+  };
+
   const fetchData = async () => {
     setLoading(true);
-    await Promise.all([fetchUnits(), fetchCities()]);
+    await Promise.all([fetchUnits(), fetchCities(), fetchStats()]);
     setLoading(false);
   };
 
@@ -306,12 +317,65 @@ function Dashboard() {
         activeTab={activeTab}
         onChange={setActiveTab}
         tabs={[
+          { id: 'dashboard', label: 'Dashboard' },
           { id: 'cities', label: 'Lista de Unidades' },
           { id: 'new', label: 'Cadastrar Cidade' },
+          { id: 'config', label: 'Configuração' }
         ]}
       />
 
-      {activeTab === 'new' ? (
+      {activeTab === 'dashboard' ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <Card className="p-4 bg-sky-100 border border-sky-200">
+              <span className="text-xs text-sky-700 uppercase font-bold">Unidades</span>
+              <div className="text-3xl font-bold text-slate-900">{dashboardStats.total_units}</div>
+            </Card>
+            <Card className="p-4 bg-indigo-100 border border-indigo-200">
+              <span className="text-xs text-indigo-700 uppercase font-bold">Cidades</span>
+              <div className="text-3xl font-bold text-slate-900">{dashboardStats.total_cities}</div>
+            </Card>
+            <Card className="p-4 bg-violet-100 border border-violet-200">
+              <span className="text-xs text-violet-700 uppercase font-bold">CTOs</span>
+              <div className="text-3xl font-bold text-slate-900">{dashboardStats.total_ctos}</div>
+            </Card>
+            <Card className="p-4 bg-emerald-100 border border-emerald-200">
+              <span className="text-xs text-emerald-700 uppercase font-bold">Clientes</span>
+              <div className="text-3xl font-bold text-slate-900">{dashboardStats.total_clients}</div>
+            </Card>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Button variant="secondary" onClick={() => setActiveTab('new')}>Cadastrar Cidade</Button>
+            <Button variant="secondary" onClick={() => setShowUnitModal(true)}>Adicionar Unidade</Button>
+            <Button variant="secondary" onClick={() => setActiveTab('config')}>Configuração</Button>
+          </div>
+        </div>
+      ) : activeTab === 'config' ? (
+        <Card className="p-6">
+          <h3 className="text-lg font-medium text-slate-900 mb-4">Configuração do Sistema</h3>
+          <p className="text-sm text-slate-500">Temas e importação de dados</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">Tema</label>
+              <input type="text" value="Proxxima Telecom" disabled className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">Cor de destaque</label>
+              <input type="text" value="#DA1B96" disabled className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <label className="block text-xs font-bold text-slate-500 mb-1">Importação de dados (CSV/JSON)</label>
+            <textarea rows={5} value={importText} onChange={(e)=>setImportText(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+          </div>
+          <div className="mt-3 flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setImportText('')}>Limpar</Button>
+            <Button onClick={async()=>{setIsImporting(true); await new Promise(r=>setTimeout(r,700)); setIsImporting(false); alert('Importação simulada executada.');}} disabled={isImporting}>
+              {isImporting ? 'Importando...' : 'Executar importação'}
+            </Button>
+          </div>
+        </Card>
+      ) : activeTab === 'new' ? (
         <Card className="p-6 max-w-xl">
           <h3 className="text-lg font-medium text-slate-900 mb-4">Nova Cidade</h3>
           <form onSubmit={handleAddCity} className="space-y-4">
@@ -374,16 +438,7 @@ function Dashboard() {
                             <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600 transition-transform group-hover:scale-110">
                               <Server className="w-6 h-6" />
                             </div>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteUnit(unit.id);
-                              }}
-                              className="p-1.5 text-slate-300 hover:text-red-600 transition-colors"
-                              title="Excluir Unidade"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Unidade</span>
                           </div>
                           <h3 className="text-xl font-bold text-slate-900 mb-1">{unit.name}</h3>
                           <p className="text-sm text-slate-500 flex items-center gap-1">
@@ -1651,7 +1706,8 @@ function ViabilityCheck() {
         if (data && data.results) {
           setResults(data.results.map((r: any) => ({
             ...r,
-            distance: r.distance
+            distance: r.distance,
+            within_radius: r.within_radius || false
           })));
           
           if (data.results.length === 0 && data.closest) {
@@ -2126,6 +2182,9 @@ function ViabilityCheck() {
                                 <Navigation className="w-3 h-3" />
                                 {Math.round(cto.distance * 1000)}m de distância
                               </p>
+                              <p className={cn("text-xs font-bold mt-1", cto.within_radius ? "text-emerald-700" : "text-amber-700")}> 
+                                {cto.within_radius ? 'Dentro do raio' : 'Fora do raio'}
+                              </p>
                               <AddressDisplay address={cto.address} className="text-xs mt-1" />
                             </div>
                           </div>
@@ -2263,10 +2322,6 @@ function Layout() {
                     <Map className="w-4 h-4" />
                     Viabilidade
                   </Link>
-                </div>
-                <div className="flex md:hidden items-center gap-2 text-xs font-medium text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
-                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                  Online
                 </div>
               </div>
               

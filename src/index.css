@@ -1,13 +1,26 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-900 antialiased;
+    @apply bg-gradient-to-br from-[#EBF0FF] via-[#EDE6FD] to-[#FDF5FA] text-[#111827] antialiased;
+    font-family: var(--font-sans);
   }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-sans);
+  }
+  button, input, select, textarea {
+    font-family: var(--font-sans);
+  }
+
+  .bg-primary { background-color: #0f1f88; }
+  .text-primary { color: #0f1f88; }
+  .border-primary { border-color: #0f1f88; }
+  .btn-primary { background-color: #0f1b7d; color: white; }
 }
+

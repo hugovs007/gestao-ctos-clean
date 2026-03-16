@@ -548,6 +548,13 @@ app.get("/api/viability", async (req, res) => {
     }
 
     // Haversine formula to calculate distance in KM
+    // optional c.type filter only if column exists for backward compatibility
+    const typeInfo = await pool.query(`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name='ctos' and column_name='type'
+    `);
+    const hasTypeColumn = typeInfo.rowCount > 0;
+
     let queryText = `
       WITH cto_distances AS (
         SELECT 
@@ -570,11 +577,16 @@ app.get("/api/viability", async (req, res) => {
           GROUP BY cto_id
         ) stats ON c.id = stats.cto_id
         WHERE c.latitude IS NOT NULL AND c.longitude IS NOT NULL
-        AND c.type = $3
     `;
 
-    const queryParams: any[] = [latitude, longitude, targetType];
-    let paramIndex = 4;
+    const queryParams: any[] = [latitude, longitude];
+    let paramIndex = 3;
+
+    if (hasTypeColumn) {
+      queryText += ` AND c.type = $3`;
+      queryParams.push(targetType);
+      paramIndex = 4;
+    }
 
     if (targetCityId) {
       queryText += ` AND c.city_id = $${paramIndex}`;
@@ -592,13 +604,18 @@ app.get("/api/viability", async (req, res) => {
 
     const allNearby = result.rows;
     const withinRadius = allNearby.filter(c => c.distance <= radiusKm);
-    
+    const allNearbyWithFlags = allNearby.map(c => ({
+      ...c,
+      within_radius: c.distance <= radiusKm
+    }));
+
     // Stats for troubleshooting
     const statsResult = await pool.query("SELECT COUNT(*) as total, COUNT(latitude) as with_gps FROM ctos");
     const stats = statsResult.rows[0];
 
     return res.json({
-      results: withinRadius,
+      results: allNearbyWithFlags,
+      withinRadiusCount: withinRadius.length,
       closest: allNearby.length > 0 ? { name: allNearby[0].name, distance: allNearby[0].distance } : null,
       stats: {
         total_ctos: parseInt(stats.total),
