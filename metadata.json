@@ -1,0 +1,5 @@
+{
+  "name": "Gestão de CTOs",
+  "description": "Sistema para documentação de portas de CTO e gestão de clientes de fibra óptica por cidade.",
+  "requestFramePermissions": ["geolocation"]
+}
