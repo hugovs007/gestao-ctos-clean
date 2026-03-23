@@ -1913,12 +1913,30 @@ function ViabilityCheck() {
       if (coordsMatch) {
         lat = parseFloat(coordsMatch[1]);
         lng = parseFloat(coordsMatch[2]);
+        
+        // Use a default display while we reverse-geocode
         setGeocodedAddress({ 
           display: "Coordenadas inseridas", 
           coords: `${lat.toFixed(8)}, ${lng.toFixed(8)}`, 
           lat, 
           lng 
         });
+
+        // Perform reverse geocode to show address to user
+        try {
+          const revRes = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`);
+          if (revRes.ok) {
+            const revData = await revRes.json();
+            setGeocodedAddress({ 
+              display: revData.display_name, 
+              coords: `${lat.toFixed(8)}, ${lng.toFixed(8)}`, 
+              lat, 
+              lng 
+            });
+          }
+        } catch (e) {
+          console.error("Reverse geocoding failed", e);
+        }
       } else {
         // Prepare structured params
         const params = new URLSearchParams();
@@ -1934,7 +1952,7 @@ function ViabilityCheck() {
           lng = geoData.lng;
           setGeocodedAddress({ 
             display: geoData.display_name || "Localização encontrada", 
-            coords: `${lat?.toFixed(6)}, ${lng?.toFixed(6)}` ,
+            coords: `${lat?.toFixed(8)}, ${lng?.toFixed(8)}` ,
             lat: lat!,
             lng: lng!
           });
