@@ -520,11 +520,14 @@ async function geocodeAddress(q: string, street?: string, city?: string, state?:
       if (city) addressParts.push(city);
       if (state) addressParts.push(state);
       
-      let finalAddress = "";
-      if (addressParts.length > 0) {
-        finalAddress = q ? `${q}, ${addressParts.join(', ')}` : addressParts.join(', ');
-      } else {
-        finalAddress = q;
+      let finalAddress = q;
+      if (!q && addressParts.length > 0) {
+        finalAddress = addressParts.join(', ');
+      } else if (q && addressParts.length > 0) {
+        // If q is already a full address (contains comma), don't append structured fields as they are likely redundant
+        if (!q.includes(',')) {
+          finalAddress = `${q}, ${addressParts.join(', ')}`;
+        }
       }
 
       url += `&address=${encodeURIComponent(finalAddress)}`;
@@ -552,7 +555,11 @@ async function geocodeAddress(q: string, street?: string, city?: string, state?:
             postcode: getComponent('postal_code')
           }
         };
+      } else {
+        console.warn(`Google Maps Geocoding non-OK status: ${data.status}`, data.error_message || '');
       }
+    } else {
+      console.warn("GOOGLE_MAPS_API_KEY is missing in environment");
     }
 
     let url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&countrycodes=br`;
