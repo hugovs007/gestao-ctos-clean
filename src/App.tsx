@@ -1866,7 +1866,13 @@ function ViabilityCheck() {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<(any & { distance: number })[]>([]);
   const [searched, setSearched] = useState(false);
-  const [geocodedAddress, setGeocodedAddress] = useState<{display: string, coords: string, lat: number, lng: number} | null>(null);
+  const [geocodedAddress, setGeocodedAddress] = useState<{
+    display: string; 
+    coords: string; 
+    lat: number; 
+    lng: number;
+    source?: 'google' | 'nominatim' | 'cache' | 'input'
+  } | null>(null);
   const [selectedCtoForRoute, setSelectedCtoForRoute] = useState<any | null>(null);
   const [routeInfo, setRouteInfo] = useState<{distance:number, duration:number, geometry:any, legs:any[]} | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
@@ -1920,7 +1926,8 @@ function ViabilityCheck() {
           display: "Coordenadas inseridas", 
           coords: `${lat.toFixed(10)}, ${lng.toFixed(10)}`, 
           lat, 
-          lng 
+          lng,
+          source: 'input'
         });
 
         // Perform reverse geocode to show address to user
@@ -1932,7 +1939,8 @@ function ViabilityCheck() {
               display: revData.display_name, 
               coords: `${lat.toFixed(10)}, ${lng.toFixed(10)}`, 
               lat, 
-              lng 
+              lng,
+              source: 'input' // Reverse geocoding from input coords
             });
           }
         } catch (e) {
@@ -1955,7 +1963,8 @@ function ViabilityCheck() {
             display: geoData.display_name || "Localização encontrada", 
             coords: `${lat?.toFixed(10)}, ${lng?.toFixed(10)}` ,
             lat: lat!,
-            lng: lng!
+            lng: lng!,
+            source: geoData.source
           });
           
           if (geoData.details) {
@@ -2361,9 +2370,26 @@ function ViabilityCheck() {
               <div className="text-[10px] md:text-xs font-medium text-slate-500 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100 flex flex-col md:flex-row items-start md:items-center gap-1 md:gap-2 animate-in fade-in zoom-in duration-300">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <MapPin className="w-3 h-3 text-indigo-400 shrink-0" />
-                  <span className="truncate max-w-[200px] md:max-w-xs block">
-                    Buscando em: <span className="text-slate-900 font-bold">{geocodedAddress.display}</span>
-                  </span>
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">Buscando em:</span>
+                      {geocodedAddress.source && (
+                        <span className={cn(
+                          "text-[9px] px-1 py-0.5 rounded font-bold uppercase tracking-wider",
+                          geocodedAddress.source === 'google' ? "bg-emerald-100 text-emerald-700" :
+                          geocodedAddress.source === 'cache' ? "bg-indigo-100 text-indigo-700" :
+                          "bg-slate-100 text-slate-600"
+                        )}>
+                          {geocodedAddress.source === 'google' ? 'Google Maps' : 
+                          geocodedAddress.source === 'cache' ? 'Inteligência (Cache)' : 
+                          geocodedAddress.source === 'input' ? 'Coordenadas' : 'Backup (OSM)'}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-slate-900 font-bold truncate max-w-[150px] md:max-w-xs block leading-tight">
+                      {geocodedAddress.display}
+                    </span>
+                  </div>
                 </div>
                 <div className="flex items-center gap-1.5 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-sm text-[9px] font-mono">
                   <Navigation className="w-2.5 h-2.5 text-indigo-400" />

@@ -505,6 +505,7 @@ async function geocodeAddress(q: string, street?: string, city?: string, state?:
       lat: lat,
       lng: lng,
       display_name: q,
+      source: 'input',
       details: {}
     };
   }
@@ -519,6 +520,7 @@ async function geocodeAddress(q: string, street?: string, city?: string, state?:
         lat: cached.latitude,
         lng: cached.longitude,
         display_name: cached.display_name,
+        source: 'cache',
         details: cached.details
       };
     }
@@ -578,6 +580,7 @@ async function geocodeAddress(q: string, street?: string, city?: string, state?:
           lat: result.geometry.location.lat,
           lng: result.geometry.location.lng,
           display_name: result.formatted_address,
+          source: 'google',
           details: {
             road: getComponent('route'),
             house_number: getComponent('street_number'),
@@ -632,6 +635,7 @@ async function geocodeAddress(q: string, street?: string, city?: string, state?:
         lat: parseFloat(data[0].lat),
         lng: parseFloat(data[0].lon),
         display_name: data[0].display_name,
+        source: 'nominatim',
         details: {
           road: address.road || '',
           house_number: address.house_number || '',
@@ -804,6 +808,47 @@ app.get("/api/route", async (req, res) => {
 });
 
 // Geocoding
+app.get("/api/diag/geocoding", async (req, res) => {
+  const googleKey = process.env.GOOGLE_MAPS_API_KEY;
+  const testAddress = "São Paulo, SP";
+  
+  const report: any = {
+    key_present: !!googleKey,
+    key_length: googleKey ? googleKey.length : 0,
+    test_address: testAddress,
+    google_maps: { status: 'Not tested' },
+    nominatim: { status: 'Not tested' }
+  };
+
+  if (googleKey) {
+    try {
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?key=${googleKey}&address=${encodeURIComponent(testAddress)}`;
+      const gRes = await fetch(url);
+      const gData = await gRes.json() as any;
+      report.google_maps = {
+        status: gData.status,
+        error_message: gData.error_message || null,
+        results_count: gData.results ? gData.results.length : 0
+      };
+    } catch (e: any) {
+      report.google_maps = { status: 'Error', error: e.message };
+    }
+  }
+
+  try {
+    const nRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(testAddress)}`, { headers: { 'User-Agent': 'GestaoCTOs/1.0' } });
+    const nData = await nRes.json() as any[];
+    report.nominatim = {
+      status: nRes.ok ? 'OK' : 'Error',
+      results_count: nData ? nData.length : 0
+    };
+  } catch (e: any) {
+    report.nominatim = { status: 'Error', error: e.message };
+  }
+
+  res.json(report);
+});
+
 app.get("/api/geocode", async (req, res) => {
   const { q, street, city, state } = req.query;
   try {
