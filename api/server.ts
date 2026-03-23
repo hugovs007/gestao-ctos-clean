@@ -602,7 +602,44 @@ async function geocodeAddress(q: string, street?: string, city?: string, state?:
 
         return finalResult;
       } else {
-        console.warn(`Google Maps Geocoding failed after all stages for "${q}"`);
+        console.warn(`Google Maps Geocoding failed after all stages for "${q}". Full Address tried: "${finalAddress}"`);
+        
+        // Final desperate attempt: if it's a short query, try adding "Brasil" to narrow it down
+        if (q && q.length < 20 && !q.includes('Brasil')) {
+          console.log(`Trying Google Maps one last time with "Brasil": "${q}, Brasil"`);
+          googleResult = await tryGeocode(`${q}, Brasil`);
+          if (googleResult) {
+            // Reprocess result exactly as above
+            const result = googleResult;
+            const components = result.address_components;
+            const getComponent = (type: string) => {
+              const comp = components.find((c: any) => c.types.includes(type));
+              return comp ? comp.long_name : '';
+            };
+
+            const finalResult = {
+              lat: result.geometry.location.lat,
+              lng: result.geometry.location.lng,
+              display_name: result.formatted_address,
+              source: 'google',
+              details: {
+                road: getComponent('route'),
+                house_number: getComponent('street_number'),
+                suburb: getComponent('sublocality_level_1') || getComponent('neighborhood'),
+                city: getComponent('administrative_area_level_2') || getComponent('locality'),
+                state: getComponent('administrative_area_level_1'),
+                postcode: getComponent('postal_code')
+              }
+            };
+
+            await pool.query(
+              "INSERT INTO geocoding_cache (query, latitude, longitude, display_name, details) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (query) DO UPDATE SET latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, display_name = EXCLUDED.display_name, details = EXCLUDED.details",
+              [q.trim().toUpperCase(), finalResult.lat, finalResult.lng, finalResult.display_name, finalResult.details]
+            );
+
+            return finalResult;
+          }
+        }
       }
     } catch (err) {
       console.error("Google Geocoding error:", err);
@@ -869,7 +906,47 @@ app.get("/api/reverse-geocode", async (req, res) => {
   const { lat, lng } = req.query;
   if (!lat || !lng) return res.status(400).json({ error: "Latitude e Longitude são obrigatórias" });
 
+  const googleKey = process.env.GOOGLE_MAPS_API_KEY;
+
+  // --- Step 1: Try Google Maps ---
+  if (googleKey) {
+    try {
+      console.log(`Reverse Geocoding (Google): ${lat}, ${lng}`);
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?key=${googleKey}&latlng=${lat},${lng}&language=pt-BR`;
+      const response = await fetch(url);
+      const data = await response.json() as any;
+
+      if (data.status === 'OK' && data.results.length > 0) {
+        const result = data.results[0];
+        const components = result.address_components;
+        const getComponent = (type: string) => {
+          const comp = components.find((c: any) => c.types.includes(type));
+          return comp ? comp.long_name : '';
+        };
+
+        return res.json({
+          display_name: result.formatted_address,
+          source: 'google',
+          details: {
+            road: getComponent('route'),
+            house_number: getComponent('street_number'),
+            suburb: getComponent('sublocality_level_1') || getComponent('neighborhood'),
+            city: getComponent('administrative_area_level_2') || getComponent('locality'),
+            state: getComponent('administrative_area_level_1'),
+            postcode: getComponent('postal_code')
+          }
+        });
+      } else {
+        console.warn(`Google Reverse Geocoding failed: ${data.status}`);
+      }
+    } catch (error: any) {
+      console.error("Google Reverse geocoding error:", error);
+    }
+  }
+
+  // --- Step 2: Fallback to Nominatim ---
   try {
+    console.log(`Reverse Geocoding (Nominatim Fallback): ${lat}, ${lng}`);
     const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`, {
       headers: {
         'User-Agent': 'GestaoCTOs/1.0'
@@ -881,6 +958,7 @@ app.get("/api/reverse-geocode", async (req, res) => {
       const address = data.address;
       res.json({
         display_name: data.display_name,
+        source: 'nominatim',
         details: {
           road: address.road || '',
           house_number: address.house_number || '',
@@ -894,7 +972,7 @@ app.get("/api/reverse-geocode", async (req, res) => {
       res.status(404).json({ error: "Localização não encontrada" });
     }
   } catch (error: any) {
-    console.error("Reverse geocoding error:", error);
+    console.error("Reverse geocoding fallback error:", error);
     res.status(500).json({ error: "Erro ao buscar detalhes do endereço" });
   }
 });
