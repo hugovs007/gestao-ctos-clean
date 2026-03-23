@@ -495,13 +495,15 @@ app.post("/api/import", async (req, res) => {
 async function geocodeAddress(q: string, street?: string, city?: string, state?: string) {
   console.log(`Geocoding request: q="${q}", street="${street}", city="${city}", state="${state}"`);
   
-  // Check if q itself contains coordinates pattern like "-6.8893, -36.9112" or "-6.8893 -36.9112"
-  const coordsMatch = q.match(/(-?\d+\.\d+)\s*[\s,;]\s*(-?\d+\.\d+)/);
+  // Improved regex for coordinates: handles . or , as decimal, and various delimiters
+  const coordsMatch = q.match(/(-?\d+[\.,]\d+)\s*[\s,;]\s*(-?\d+[\.,]\d+)/);
   if (coordsMatch) {
-    console.log(`Detected coordinates in query: ${coordsMatch[1]}, ${coordsMatch[2]}`);
+    const lat = parseFloat(coordsMatch[1].replace(',', '.'));
+    const lng = parseFloat(coordsMatch[2].replace(',', '.'));
+    console.log(`Detected coordinates in query: ${lat}, ${lng}`);
     return {
-      lat: parseFloat(coordsMatch[1]),
-      lng: parseFloat(coordsMatch[2]),
+      lat: lat,
+      lng: lng,
       display_name: q,
       details: {}
     };
@@ -718,7 +720,8 @@ app.get("/api/route", async (req, res) => {
   }
 
   const profile = (mode === 'driving' || mode === 'cycling') ? mode : 'walking';
-  const url = `https://router.project-osrm.org/route/v1/${profile}/${fromLngNum},${fromLatNum};${toLngNum},${toLatNum}?overview=full&geometries=geojson&steps=true`; 
+  // Use radiuses=100;100 to prevent snapping to roads further than 100m away
+  const url = `https://router.project-osrm.org/route/v1/${profile}/${fromLngNum},${fromLatNum};${toLngNum},${toLatNum}?overview=full&geometries=geojson&steps=true&radiuses=100;100`; 
 
   try {
     const routeRes = await fetch(url, { headers: { 'User-Agent': 'GestaoCTOs/1.0' } });

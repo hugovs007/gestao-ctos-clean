@@ -1909,15 +1909,16 @@ function ViabilityCheck() {
       let lat: number | null = null;
       let lng: number | null = null;
 
-      const coordsMatch = query.match(/(-?\d+\.\d+)\s*[\s,;]\s*(-?\d+\.\d+)/);
+      // Improved regex for coordinates: handles . or , as decimal, and various delimiters
+      const coordsMatch = query.match(/(-?\d+[\.,]\d+)\s*[\s,;]\s*(-?\d+[\.,]\d+)/);
       if (coordsMatch) {
-        lat = parseFloat(coordsMatch[1]);
-        lng = parseFloat(coordsMatch[2]);
+        lat = parseFloat(coordsMatch[1].replace(',', '.'));
+        lng = parseFloat(coordsMatch[2].replace(',', '.'));
         
         // Use a default display while we reverse-geocode
         setGeocodedAddress({ 
           display: "Coordenadas inseridas", 
-          coords: `${lat.toFixed(8)}, ${lng.toFixed(8)}`, 
+          coords: `${lat.toFixed(10)}, ${lng.toFixed(10)}`, 
           lat, 
           lng 
         });
@@ -1929,7 +1930,7 @@ function ViabilityCheck() {
             const revData = await revRes.json();
             setGeocodedAddress({ 
               display: revData.display_name, 
-              coords: `${lat.toFixed(8)}, ${lng.toFixed(8)}`, 
+              coords: `${lat.toFixed(10)}, ${lng.toFixed(10)}`, 
               lat, 
               lng 
             });
@@ -1952,7 +1953,7 @@ function ViabilityCheck() {
           lng = geoData.lng;
           setGeocodedAddress({ 
             display: geoData.display_name || "Localização encontrada", 
-            coords: `${lat?.toFixed(8)}, ${lng?.toFixed(8)}` ,
+            coords: `${lat?.toFixed(10)}, ${lng?.toFixed(10)}` ,
             lat: lat!,
             lng: lng!
           });
@@ -2048,7 +2049,7 @@ function ViabilityCheck() {
         setAddress(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
         setGeocodedAddress({ 
           display: "Sua localização atual", 
-          coords: `${lat.toFixed(8)}, ${lng.toFixed(8)}`, 
+          coords: `${lat.toFixed(10)}, ${lng.toFixed(10)}`, 
           lat, 
           lng 
         });
