@@ -509,12 +509,27 @@ async function geocodeAddress(q: string, street?: string, city?: string, state?:
     };
   }
 
+  // --- Step 1: Check Cache ---
+  try {
+    const cacheRes = await pool.query("SELECT * FROM geocoding_cache WHERE query = $1", [q.trim().toUpperCase()]);
+    if (cacheRes.rows.length > 0) {
+      const cached = cacheRes.rows[0];
+      console.log(`Geocoding CACHE HIT for "${q}": ${cached.display_name}`);
+      return {
+        lat: cached.latitude,
+        lng: cached.longitude,
+        display_name: cached.display_name,
+        details: cached.details
+      };
+    }
+  } catch (err) {
+    console.error("Cache check error:", err);
+  }
+
   const googleKey = process.env.GOOGLE_MAPS_API_KEY;
 
-  try {
-    if (googleKey) {
-      let url = `https://maps.googleapis.com/maps/api/geocode/json?key=${googleKey}&language=pt-BR`;
-      
+  if (googleKey) {
+    try {
       let addressParts = [];
       if (street) addressParts.push(street);
       if (city) addressParts.push(city);
@@ -524,25 +539,42 @@ async function geocodeAddress(q: string, street?: string, city?: string, state?:
       if (!q && addressParts.length > 0) {
         finalAddress = addressParts.join(', ');
       } else if (q && addressParts.length > 0) {
-        // If q is already a full address (contains comma), don't append structured fields as they are likely redundant
         if (!q.includes(',')) {
           finalAddress = `${q}, ${addressParts.join(', ')}`;
         }
       }
 
-      url += `&address=${encodeURIComponent(finalAddress)}`;
-      console.log(`Using Google Maps Geocoding: ${finalAddress}`);
-      const response = await fetch(url);
-      const data = await response.json() as any;
-      if (data.status === 'OK' && data.results.length > 0) {
-        const result = data.results[0];
+      const tryGeocode = async (address: string) => {
+        console.log(`Trying Google Maps for: "${address}"`);
+        const url = `https://maps.googleapis.com/maps/api/geocode/json?key=${googleKey}&language=pt-BR&address=${encodeURIComponent(address)}`;
+        const response = await fetch(url);
+        const data = await response.json() as any;
+        if (data.status === 'OK' && data.results.length > 0) return data.results[0];
+        return null;
+      };
+
+      let googleResult = await tryGeocode(finalAddress);
+      if (!googleResult && q && q !== finalAddress) {
+        googleResult = await tryGeocode(q);
+      }
+      if (!googleResult && q && q.includes(',')) {
+        const parts = q.split(',');
+        if (parts.length > 3) {
+          const simplified = parts.slice(0, 2).join(',') + ',' + parts[parts.length-2];
+          googleResult = await tryGeocode(simplified);
+        }
+      }
+
+      if (googleResult) {
+        const result = googleResult;
         console.log(`Google Maps success: ${result.formatted_address}`);
         const components = result.address_components;
         const getComponent = (type: string) => {
           const comp = components.find((c: any) => c.types.includes(type));
           return comp ? comp.long_name : '';
         };
-        return {
+
+        const finalResult = {
           lat: result.geometry.location.lat,
           lng: result.geometry.location.lng,
           display_name: result.formatted_address,
@@ -555,26 +587,41 @@ async function geocodeAddress(q: string, street?: string, city?: string, state?:
             postcode: getComponent('postal_code')
           }
         };
-      } else {
-        console.warn(`Google Maps Geocoding non-OK status: ${data.status}`, data.error_message || '');
-      }
-    } else {
-      console.warn("GOOGLE_MAPS_API_KEY is missing in environment");
-    }
 
+        try {
+          await pool.query(
+            "INSERT INTO geocoding_cache (query, latitude, longitude, display_name, details) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (query) DO UPDATE SET latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, display_name = EXCLUDED.display_name, details = EXCLUDED.details",
+            [q.trim().toUpperCase(), finalResult.lat, finalResult.lng, finalResult.display_name, finalResult.details]
+          );
+        } catch (err) {
+          console.error("Cache save error:", err);
+        }
+
+        return finalResult;
+      } else {
+        console.warn(`Google Maps Geocoding failed after all stages for "${q}"`);
+      }
+    } catch (err) {
+      console.error("Google Geocoding error:", err);
+    }
+  } else {
+    console.warn("GOOGLE_MAPS_API_KEY is missing in environment");
+  }
+
+  // --- Step 3: Nominatim Fallback ---
+  try {
     let url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&countrycodes=br`;
-    
-    // If q looks like a full address (contains a comma), prioritize q as a general search
     if (q && (q.includes(',') || q.split(' ').length > 4)) {
       url += `&q=${encodeURIComponent(q)}`;
     } else if (street || city || state) {
       if (street) url += `&street=${encodeURIComponent(street)}`;
       if (city) url += `&city=${encodeURIComponent(city)}`;
       if (state) url += `&state=${encodeURIComponent(state)}`;
-      if (q) url += `&q=${encodeURIComponent(q)}`; // Append q as extra context if small
+      if (q) url += `&q=${encodeURIComponent(q)}`;
     } else {
       url += `&q=${encodeURIComponent(q)}`;
     }
+
     console.log(`Using Nominatim Geocoding fallback: ${url}`);
     const response = await fetch(url, { headers: { 'User-Agent': 'GestaoCTOs/1.0' } });
     const data = await response.json() as any[];
@@ -596,8 +643,9 @@ async function geocodeAddress(q: string, street?: string, city?: string, state?:
       };
     }
   } catch (error) {
-    console.error("Internal geocoding error:", error);
+    console.error("Nominatim geocoding error:", error);
   }
+
   return null;
 }
 
