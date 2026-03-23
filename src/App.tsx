@@ -1913,7 +1913,12 @@ function ViabilityCheck() {
       if (coordsMatch) {
         lat = parseFloat(coordsMatch[1]);
         lng = parseFloat(coordsMatch[2]);
-        setGeocodedAddress({ display: "Coordenadas inseridas", coords: `${lat.toFixed(6)}, ${lng.toFixed(6)}`, lat, lng });
+        setGeocodedAddress({ 
+          display: "Coordenadas inseridas", 
+          coords: `${lat.toFixed(8)}, ${lng.toFixed(8)}`, 
+          lat, 
+          lng 
+        });
       } else {
         // Prepare structured params
         const params = new URLSearchParams();
@@ -2023,7 +2028,12 @@ function ViabilityCheck() {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
         setAddress(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
-        setGeocodedAddress({ display: "Sua localização atual", coords: `${lat.toFixed(6)}, ${lng.toFixed(6)}`, lat, lng });
+        setGeocodedAddress({ 
+          display: "Sua localização atual", 
+          coords: `${lat.toFixed(8)}, ${lng.toFixed(8)}`, 
+          lat, 
+          lng 
+        });
         
         try {
           const res = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`);
@@ -2338,7 +2348,7 @@ function ViabilityCheck() {
                 </div>
                 <div className="flex items-center gap-1.5 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-sm text-[9px] font-mono">
                   <Navigation className="w-2.5 h-2.5 text-indigo-400" />
-                  <span className="text-slate-600">{geocodedAddress.coords}</span>
+                  <span className="text-slate-600 select-all">{geocodedAddress.coords}</span>
                 </div>
               </div>
             )}

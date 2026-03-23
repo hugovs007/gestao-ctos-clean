@@ -360,7 +360,7 @@ app.post("/api/import", async (req, res) => {
         };
 
         const isCoordValid = (v: number, isLat = true) =>
-          Number.isFinite(v) && (isLat ? v >= -90 && v <= 90 : v >= -180 && v <= 180);
+          Number.isFinite(v) && (isLat ? v >= -91 && v <= 91 : v >= -181 && v <= 181);
 
         if (!isCoordValid(latitude, true) || !isCoordValid(longitude, false)) {
           const parsed = parseCoordsFromAddress(row.address);
