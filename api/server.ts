@@ -377,9 +377,8 @@ app.post("/api/import", async (req, res) => {
           totalPorts,
           isCoordValid(latitude, true) ? latitude : null,
           isCoordValid(longitude, false) ? longitude : null,
-          row.type ? row.type.toString().trim() : 'residential'
         ];
-      }).filter((r: any) => r !== null);
+      }).filter((r: any) => r !== null) as any[][];
 
     } else {
       // Existing geogrid import path (city names)
@@ -434,7 +433,7 @@ app.post("/api/import", async (req, res) => {
           Number.isFinite(lng) ? lng : null,
           (row.type || 'residential').toString().trim()
         ];
-      }).filter((r: any) => r !== null);
+      }).filter((r: any) => r !== null) as any[][];
     }
 
     if (ctoData.length === 0) {
@@ -494,9 +493,12 @@ app.post("/api/import", async (req, res) => {
 
 // Helper Geocoding Function
 async function geocodeAddress(q: string, street?: string, city?: string, state?: string) {
-  // Check if q itself contains coordinates pattern like "-6.8893, -36.9112"
-  const coordsMatch = q.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
+  console.log(`Geocoding request: q="${q}", street="${street}", city="${city}", state="${state}"`);
+  
+  // Check if q itself contains coordinates pattern like "-6.8893, -36.9112" or "-6.8893 -36.9112"
+  const coordsMatch = q.match(/(-?\d+\.\d+)\s*[\s,;]\s*(-?\d+\.\d+)/);
   if (coordsMatch) {
+    console.log(`Detected coordinates in query: ${coordsMatch[1]}, ${coordsMatch[2]}`);
     return {
       lat: parseFloat(coordsMatch[1]),
       lng: parseFloat(coordsMatch[2]),
@@ -524,10 +526,12 @@ async function geocodeAddress(q: string, street?: string, city?: string, state?:
       }
 
       url += `&address=${encodeURIComponent(finalAddress)}`;
+      console.log(`Using Google Maps Geocoding: ${finalAddress}`);
       const response = await fetch(url);
       const data = await response.json() as any;
       if (data.status === 'OK' && data.results.length > 0) {
         const result = data.results[0];
+        console.log(`Google Maps success: ${result.formatted_address}`);
         const components = result.address_components;
         const getComponent = (type: string) => {
           const comp = components.find((c: any) => c.types.includes(type));
@@ -562,10 +566,12 @@ async function geocodeAddress(q: string, street?: string, city?: string, state?:
     } else {
       url += `&q=${encodeURIComponent(q)}`;
     }
+    console.log(`Using Nominatim Geocoding fallback: ${url}`);
     const response = await fetch(url, { headers: { 'User-Agent': 'GestaoCTOs/1.0' } });
     const data = await response.json() as any[];
     if (data && data.length > 0) {
       const address = data[0].address || {};
+      console.log(`Nominatim success: ${data[0].display_name}`);
       return {
         lat: parseFloat(data[0].lat),
         lng: parseFloat(data[0].lon),

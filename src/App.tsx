@@ -949,7 +949,7 @@ function CityView() {
   const [editCityForm, setEditCityForm] = useState({ name: '', unit_id: '' });
 
   const [editingCTO, setEditingCTO] = useState<CTO | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', address: '', total_ports: 16 });
+  const [editForm, setEditForm] = useState({ name: '', address: '', total_ports: 16, latitude: null as number | null, longitude: null as number | null });
 
   // Sync state
   const [isSyncing, setIsSyncing] = useState(false);
@@ -1084,7 +1084,13 @@ function CityView() {
   const handleOpenEdit = (e: React.MouseEvent, cto: CTO) => {
     e.stopPropagation();
     setEditingCTO(cto);
-    setEditForm({ name: cto.name, address: cto.address || '', total_ports: cto.total_ports });
+    setEditForm({ 
+      name: cto.name, 
+      address: cto.address || '', 
+      total_ports: cto.total_ports,
+      latitude: cto.latitude || null,
+      longitude: cto.longitude || null
+    });
   };
 
   const handleSyncCoords = async () => {
@@ -1444,7 +1450,12 @@ function CityView() {
                     type="button"
                     onClick={() => {
                       navigator.geolocation?.getCurrentPosition(
-                        (pos) => setEditForm(prev => ({ ...prev, address: `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}` })),
+                        (pos) => setEditForm(prev => ({ 
+                          ...prev, 
+                          latitude: pos.coords.latitude,
+                          longitude: pos.coords.longitude,
+                          address: prev.address || "Localização atual"
+                        })),
                         () => alert('Não foi possível obter a localização.')
                       );
                     }}
@@ -1455,6 +1466,32 @@ function CityView() {
                   </button>
                 </div>
               </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Latitude</label>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="-6.8893"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                    value={editForm.latitude || ''}
+                    onChange={(e) => setEditForm({ ...editForm, latitude: e.target.value === '' ? null : parseFloat(e.target.value) })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Longitude</label>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="-36.9112"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                    value={editForm.longitude || ''}
+                    onChange={(e) => setEditForm({ ...editForm, longitude: e.target.value === '' ? null : parseFloat(e.target.value) })}
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Número de Portas</label>
                 <select
@@ -1872,7 +1909,7 @@ function ViabilityCheck() {
       let lat: number | null = null;
       let lng: number | null = null;
 
-      const coordsMatch = query.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
+      const coordsMatch = query.match(/(-?\d+\.\d+)\s*[\s,;]\s*(-?\d+\.\d+)/);
       if (coordsMatch) {
         lat = parseFloat(coordsMatch[1]);
         lng = parseFloat(coordsMatch[2]);
