@@ -648,45 +648,6 @@ async function geocodeAddress(q: string, street?: string, city?: string, state?:
     console.warn("GOOGLE_MAPS_API_KEY is missing in environment");
   }
 
-  // --- Step 3: Nominatim Fallback ---
-  try {
-    let url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&countrycodes=br`;
-    if (q && (q.includes(',') || q.split(' ').length > 4)) {
-      url += `&q=${encodeURIComponent(q)}`;
-    } else if (street || city || state) {
-      if (street) url += `&street=${encodeURIComponent(street)}`;
-      if (city) url += `&city=${encodeURIComponent(city)}`;
-      if (state) url += `&state=${encodeURIComponent(state)}`;
-      if (q) url += `&q=${encodeURIComponent(q)}`;
-    } else {
-      url += `&q=${encodeURIComponent(q)}`;
-    }
-
-    console.log(`Using Nominatim Geocoding fallback: ${url}`);
-    const response = await fetch(url, { headers: { 'User-Agent': 'GestaoCTOs/1.0' } });
-    const data = await response.json() as any[];
-    if (data && data.length > 0) {
-      const address = data[0].address || {};
-      console.log(`Nominatim success: ${data[0].display_name}`);
-      return {
-        lat: parseFloat(data[0].lat),
-        lng: parseFloat(data[0].lon),
-        display_name: data[0].display_name,
-        source: 'nominatim',
-        details: {
-          road: address.road || '',
-          house_number: address.house_number || '',
-          suburb: address.suburb || address.neighbourhood || '',
-          city: address.city || address.town || address.village || '',
-          state: address.state || '',
-          postcode: address.postcode || ''
-        }
-      };
-    }
-  } catch (error) {
-    console.error("Nominatim geocoding error:", error);
-  }
-
   return null;
 }
 
@@ -944,37 +905,8 @@ app.get("/api/reverse-geocode", async (req, res) => {
     }
   }
 
-  // --- Step 2: Fallback to Nominatim ---
-  try {
-    console.log(`Reverse Geocoding (Nominatim Fallback): ${lat}, ${lng}`);
-    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`, {
-      headers: {
-        'User-Agent': 'GestaoCTOs/1.0'
-      }
-    });
-    const data = await response.json() as any;
-    
-    if (data && data.address) {
-      const address = data.address;
-      res.json({
-        display_name: data.display_name,
-        source: 'nominatim',
-        details: {
-          road: address.road || '',
-          house_number: address.house_number || '',
-          suburb: address.suburb || address.neighbourhood || '',
-          city: address.city || address.town || address.village || '',
-          state: address.state || '',
-          postcode: address.postcode || ''
-        }
-      });
-    } else {
-      res.status(404).json({ error: "Localização não encontrada" });
-    }
-  } catch (error: any) {
-    console.error("Reverse geocoding fallback error:", error);
-    res.status(500).json({ error: "Erro ao buscar detalhes do endereço" });
-  }
+  // --- Step 2: Fallback Removed ---
+  res.status(404).json({ error: "Localização não encontrada no Google Maps. Fallback do OSM desativado." });
 });
 
 // Search
