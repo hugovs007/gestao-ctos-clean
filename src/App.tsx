@@ -1,14 +1,14 @@
 // Version 1.0.1 - Auth Integration
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useParams, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { Plus, Server, MapPin, Users, Search, ArrowLeft, Trash2, Edit2, CheckCircle, XCircle, ExternalLink, AlertTriangle, ChevronDown, Navigation, Locate, Filter, Map } from 'lucide-react';
+import { Plus, Server, MapPin, Users, Search, ArrowLeft, Trash2, Edit2, CheckCircle, XCircle, ExternalLink, AlertTriangle, ChevronDown, Navigation, Locate, Filter, Map, Loader2 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { Unit, City, CTO, Client } from './types.js';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { auth } from './firebase';
-import Login from './pages/Login';
-import UsersPage from './pages/Users';
+import { AuthProvider, useAuth } from './contexts/AuthContext.js';
+import { auth } from './firebase.js';
+import Login from './pages/Login.js';
+import UsersPage from './pages/Users.js';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -29,10 +29,13 @@ async function authFetch(url: string, options: RequestInit = {}) {
 
 function ProtectedRoute({ children, roles }: { children: React.ReactNode, roles?: string[] }) {
   const { user, loading } = useAuth();
+  
+  console.log('[ProtectedRoute] user:', user, 'loading:', loading);
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
   
   if (!user) {
+    console.log('[ProtectedRoute] No user found, redirecting to /login');
     return <Navigate to="/login" replace />;
   }
 

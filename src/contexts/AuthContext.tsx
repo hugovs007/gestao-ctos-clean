@@ -51,9 +51,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log('[AuthContext] onAuthStateChanged fired:', firebaseUser ? 'User authenticated' : 'No user');
       if (firebaseUser) {
         await syncUser();
       } else {
+        console.log('[AuthContext] Clearing user state');
         setUser(null);
         setLoading(false);
       }
