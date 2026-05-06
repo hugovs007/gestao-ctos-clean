@@ -1679,7 +1679,7 @@ function ViabilityCheck() {
   );
 }
 
-function App() {
+export default function App() {
   return (
     <AuthProvider>
       <Routes>
@@ -1877,8 +1877,3 @@ function DashboardLayout() {
   );
 }
 
-export default function App() {
-  return (
-    <Layout />
-  );
-}
