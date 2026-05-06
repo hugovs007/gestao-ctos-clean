@@ -1,3 +1,4 @@
+// Version 1.0.1 - Auth Integration
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useParams, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { Plus, Server, MapPin, Users, Search, ArrowLeft, Trash2, Edit2, CheckCircle, XCircle, ExternalLink, AlertTriangle, ChevronDown, Navigation, Locate, Filter, Map } from 'lucide-react';
