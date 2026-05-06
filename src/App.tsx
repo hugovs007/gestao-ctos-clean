@@ -1609,7 +1609,7 @@ function ViabilityCheck() {
                           <h4 className="font-bold text-lg text-slate-900">{cto.name}</h4>
                           <p className="text-sm text-slate-500 flex items-center gap-1">
                             <Navigation className="w-3 h-3" />
-                            {cto.distance.toFixed(3)} km de distância
+                            {cto.distance.toFixed(3)} km {cto.is_route ? '(por rota)' : '(raio)'}
                           </p>
                           <AddressDisplay address={cto.address} className="text-xs mt-1" />
                         </div>

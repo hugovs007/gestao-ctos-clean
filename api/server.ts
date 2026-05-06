@@ -12,6 +12,36 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
+async function getGoogleDistances(origin: {lat: number, lng: number}, destinations: {lat: number, lng: number}[]) {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) return destinations.map(() => null);
+
+  try {
+    const originsStr = `${origin.lat},${origin.lng}`;
+    const destinationsStr = destinations.map(d => `${d.lat},${d.lng}`).join('|');
+    
+    const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${originsStr}&destinations=${destinationsStr}&mode=walking&key=${apiKey}`;
+    
+    const response = await fetch(url);
+    const data = await response.json() as any;
+    
+    if (data.status !== 'OK') {
+      console.error("Google Maps API Error:", data.status, data.error_message);
+      return destinations.map(() => null);
+    }
+    
+    return data.rows[0].elements.map((el: any) => {
+      if (el.status === 'OK') {
+        return el.distance.value / 1000; // converter metros para KM
+      }
+      return null;
+    });
+  } catch (error) {
+    console.error("Error calling Google Maps API:", error);
+    return destinations.map(() => null);
+  }
+}
+
 // Initialize DB
 initializeDb().catch(console.error);
 
@@ -378,8 +408,9 @@ app.get("/api/viability", async (req, res) => {
   const radiusKm = parseFloat(radius as string) || 1.0;
 
   try {
-    // Haversine formula to calculate distance in KM
-    // 6371 is the earth radius in KM
+    // 1. Filtragem inicial por Haversine (linha reta) com margem de segurança de 1km extra
+    // Isso reduz o número de pontos para enviar ao Google Maps
+    const initialBuffer = 1.0; 
     const result = await pool.query(`
       SELECT 
         c.*, 
@@ -390,7 +421,7 @@ app.get("/api/viability", async (req, res) => {
             cos(radians(c.longitude) - radians($2)) + 
             sin(radians($1)) * sin(radians(c.latitude))
           )
-        ) AS distance
+        ) AS distance_direct
       FROM ctos c
       LEFT JOIN (
         SELECT cto_id, COUNT(*) as used_ports
@@ -405,11 +436,34 @@ app.get("/api/viability", async (req, res) => {
           cos(radians(c.longitude) - radians($2)) + 
           sin(radians($1)) * sin(radians(c.latitude))
         )
-      ) <= $3
-      ORDER BY distance ASC
-    `, [latitude, longitude, radiusKm]);
+      ) <= $3 + $4
+      ORDER BY distance_direct ASC
+      LIMIT 25
+    `, [latitude, longitude, radiusKm, initialBuffer]);
 
-    res.json(result.rows);
+    const candidates = result.rows;
+
+    if (candidates.length === 0) {
+      return res.json([]);
+    }
+
+    // 2. Calcular distância real de rota via Google Maps
+    const destinations = candidates.map(c => ({ lat: c.latitude, lng: c.longitude }));
+    const routeDistances = await getGoogleDistances({ lat: latitude, lng: longitude }, destinations);
+
+    // 3. Atualizar distâncias e filtrar novamente
+    const resultsWithRoute = candidates.map((c, index) => {
+      const routeDistance = routeDistances[index];
+      return {
+        ...c,
+        distance: routeDistance !== null ? routeDistance : c.distance_direct,
+        is_route: routeDistance !== null
+      };
+    })
+    .filter(c => c.distance <= radiusKm) // Filtrar pelo raio real
+    .sort((a, b) => a.distance - b.distance); // Ordenar pela distância real
+
+    res.json(resultsWithRoute);
   } catch (error: any) {
     console.error("Error in viability check:", error);
     res.status(500).json({ error: error.message });
