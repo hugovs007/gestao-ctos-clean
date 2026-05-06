@@ -4,10 +4,10 @@ import { Plus, Server, MapPin, Users, Search, ArrowLeft, Trash2, Edit2, CheckCir
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { Unit, City, CTO, Client } from './types.js';
-import { AuthProvider, useAuth } from './contexts/AuthContext.js';
-import { auth } from './firebase.js';
-import Login from './pages/Login.js';
-import UsersPage from './pages/Users.js';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { auth } from './firebase';
+import Login from './pages/Login';
+import UsersPage from './pages/Users';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
