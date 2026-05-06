@@ -4,9 +4,46 @@ import { Plus, Server, MapPin, Users, Search, ArrowLeft, Trash2, Edit2, CheckCir
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { Unit, City, CTO, Client } from './types.js';
+import { AuthProvider, useAuth } from './contexts/AuthContext.js';
+import { auth } from './firebase.js';
+import Login from './pages/Login.js';
+import UsersPage from './pages/Users.js';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
+}
+
+// Helper to handle authorized fetches
+async function authFetch(url: string, options: RequestInit = {}) {
+  const currentUser = auth.currentUser;
+  if (currentUser) {
+    const idToken = await currentUser.getIdToken();
+    options.headers = {
+      ...options.headers,
+      'Authorization': `Bearer ${idToken}`,
+    };
+  }
+  return fetch(url, options);
+}
+
+function ProtectedRoute({ children, roles }: { children: React.ReactNode, roles?: string[] }) {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate('/login');
+    }
+  }, [user, loading, navigate]);
+
+  if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
+  if (!user) return null;
+
+  if (roles && !roles.includes(user.role)) {
+    return <div className="h-screen flex items-center justify-center text-red-600">Acesso negado.</div>;
+  }
+
+  return <>{children}</>;
 }
 
 // --- Components ---
@@ -74,7 +111,7 @@ function Badge({ status }: { status: 'active' | 'inactive' }) {
 }
 
 function AddressDisplay({ address, className }: { address?: string; className?: string }) {
-  if (!address) return <span className={className}>Sem endereço</span>;
+  if (!address) return <span className={className}>Sem endereÃ§o</span>;
 
   const isLink = address.startsWith('http') || 
                  address.startsWith('www.') || 
@@ -149,7 +186,7 @@ function Dashboard() {
 
   const fetchUnits = async () => {
     try {
-      const res = await fetch('/api/units');
+      const res = await authFetch('/api/units');
       const data = await res.json();
       if (Array.isArray(data)) setUnits(data);
     } catch (error) {
@@ -159,7 +196,7 @@ function Dashboard() {
 
   const fetchCities = async () => {
     try {
-      const res = await fetch('/api/cities');
+      const res = await authFetch('/api/cities');
       const data = await res.json();
       if (Array.isArray(data)) {
         setCities(data);
@@ -179,7 +216,7 @@ function Dashboard() {
     if (!newCityName.trim()) return;
 
     try {
-      const res = await fetch('/api/cities', {
+      const res = await authFetch('/api/cities', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -198,7 +235,7 @@ function Dashboard() {
       }
     } catch (error) {
       console.error('Failed to add city', error);
-      alert('Erro de conexão ao tentar salvar a cidade.');
+      alert('Erro de conexÃ£o ao tentar salvar a cidade.');
     }
   };
 
@@ -207,7 +244,7 @@ function Dashboard() {
     if (!newUnitName.trim()) return;
 
     try {
-      const res = await fetch('/api/units', {
+      const res = await authFetch('/api/units', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newUnitName }),
@@ -223,9 +260,9 @@ function Dashboard() {
   };
 
   const handleDeleteUnit = async (id: number) => {
-    if (!confirm('Tem certeza que deseja excluir esta unidade? As cidades ficarão sem unidade.')) return;
+    if (!confirm('Tem certeza que deseja excluir esta unidade? As cidades ficarÃ£o sem unidade.')) return;
     try {
-      await fetch(`/api/units/${id}`, { method: 'DELETE' });
+      await authFetch(`/api/units/${id}`, { method: 'DELETE' });
       fetchUnits();
       fetchCities();
     } catch (error) {
@@ -244,7 +281,7 @@ function Dashboard() {
     e.preventDefault();
     if (!editingCity) return;
     try {
-      const res = await fetch(`/api/cities/${editingCity.id}`, {
+      const res = await authFetch(`/api/cities/${editingCity.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -304,7 +341,7 @@ function Dashboard() {
               <label className="block text-sm font-medium text-slate-700 mb-1">Nome da Cidade</label>
               <input
                 type="text"
-                placeholder="Ex: São Paulo"
+                placeholder="Ex: SÃ£o Paulo"
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                 value={newCityName}
                 onChange={(e) => setNewCityName(e.target.value)}
@@ -339,7 +376,7 @@ function Dashboard() {
             <div className="text-center py-12 bg-slate-50 rounded-xl border border-dashed border-slate-300">
               <MapPin className="w-12 h-12 text-slate-400 mx-auto mb-3" />
               <h3 className="text-lg font-medium text-slate-900">Nenhuma cidade cadastrada</h3>
-              <p className="text-slate-500">Adicione uma cidade para começar.</p>
+              <p className="text-slate-500">Adicione uma cidade para comeÃ§ar.</p>
             </div>
           ) : (
             <div className="space-y-8">
@@ -517,7 +554,7 @@ function Dashboard() {
 
             <div className="mb-4">
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Instruções: Selecione as linhas no Excel, copie (Ctrl+C) e cole aqui (Ctrl+V).
+                InstruÃ§Ãµes: Selecione as linhas no Excel, copie (Ctrl+C) e cole aqui (Ctrl+V).
               </label>
               <textarea
                 className="w-full h-64 p-3 border border-slate-300 rounded-lg font-mono text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
@@ -529,8 +566,8 @@ function Dashboard() {
 
             <div className="flex justify-between items-center">
               <p className="text-xs text-slate-400 max-w-xs">
-                Limite aumentado: Suporta até 10.000 linhas por vez. 
-                O sistema identificará Cidade, Sigla (CTO), Latitude e Longitude automaticamente.
+                Limite aumentado: Suporta atÃ© 10.000 linhas por vez. 
+                O sistema identificarÃ¡ Cidade, Sigla (CTO), Latitude e Longitude automaticamente.
               </p>
               <div className="flex gap-3">
                 <Button variant="secondary" onClick={() => setShowImportModal(false)}>Cancelar</Button>
@@ -555,12 +592,12 @@ function Dashboard() {
                       }).filter(r => r && r.cidade && r.cidade !== 'Cidade'); // Filter header and invalid rows
 
                       if (rows.length === 0) {
-                        alert('Nenhum dado válido encontrado. Certifique-se de copiar as colunas corretas.');
+                        alert('Nenhum dado vÃ¡lido encontrado. Certifique-se de copiar as colunas corretas.');
                         setIsImporting(false);
                         return;
                       }
 
-                      const res = await fetch('/api/import', {
+                      const res = await authFetch('/api/import', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ rows })
@@ -572,7 +609,7 @@ function Dashboard() {
                         setShowImportModal(false);
                         fetchCities();
                       } else {
-                        alert('Erro na importação: ' + result.error);
+                        alert('Erro na importaÃ§Ã£o: ' + result.error);
                       }
                     } catch (err) {
                       console.error('Import failed', err);
@@ -583,7 +620,7 @@ function Dashboard() {
                   }}
                   disabled={isImporting || !importText.trim()}
                 >
-                  {isImporting ? 'Importando...' : 'Iniciar Importação'}
+                  {isImporting ? 'Importando...' : 'Iniciar ImportaÃ§Ã£o'}
                 </Button>
               </div>
             </div>
@@ -627,7 +664,7 @@ function Dashboard() {
               </div>
               <div className="flex justify-end gap-3 mt-6">
                 <Button type="button" variant="secondary" onClick={() => setEditingCity(null)}>Cancelar</Button>
-                <Button type="submit">Salvar Alterações</Button>
+                <Button type="submit">Salvar AlteraÃ§Ãµes</Button>
               </div>
             </form>
           </Card>
@@ -657,7 +694,7 @@ function CityView() {
   const [isEditingCity, setIsEditingCity] = useState(false);
   const [editCityForm, setEditCityForm] = useState({ name: '', unit_id: '' });
 
-  // Edição de CTO
+  // EdiÃ§Ã£o de CTO
   const [editingCTO, setEditingCTO] = useState<CTO | null>(null);
   const [editForm, setEditForm] = useState({ name: '', address: '', total_ports: 16 });
 
@@ -698,7 +735,7 @@ function CityView() {
   const fetchCTOs = async (page = 1) => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/cities/${id}/ctos?page=${page}&limit=100`);
+      const res = await authFetch(`/api/cities/${id}/ctos?page=${page}&limit=100`);
       const data = await res.json();
       if (data.ctos && Array.isArray(data.ctos)) {
         setCtos(data.ctos);
@@ -716,7 +753,7 @@ function CityView() {
 
   const handleGetLocation = () => {
     if (!navigator.geolocation) {
-      alert("Geolocalização não é suportada pelo seu navegador.");
+      alert("GeolocalizaÃ§Ã£o nÃ£o Ã© suportada pelo seu navegador.");
       return;
     }
 
@@ -728,10 +765,10 @@ function CityView() {
       },
       (error) => {
         console.error("Error getting location:", error);
-        let msg = "Erro ao obter localização.";
-        if (error.code === 1) msg = "Permissão de localização negada. Verifique as configurações do seu navegador.";
-        else if (error.code === 2) msg = "Localização indisponível. Verifique se o GPS está ativado.";
-        else if (error.code === 3) msg = "Tempo esgotado ao obter localização.";
+        let msg = "Erro ao obter localizaÃ§Ã£o.";
+        if (error.code === 1) msg = "PermissÃ£o de localizaÃ§Ã£o negada. Verifique as configuraÃ§Ãµes do seu navegador.";
+        else if (error.code === 2) msg = "LocalizaÃ§Ã£o indisponÃ­vel. Verifique se o GPS estÃ¡ ativado.";
+        else if (error.code === 3) msg = "Tempo esgotado ao obter localizaÃ§Ã£o.";
         alert(msg);
       }
     );
@@ -740,7 +777,7 @@ function CityView() {
   const handleSaveCityEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch(`/api/cities/${id}`, {
+      const res = await authFetch(`/api/cities/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -763,7 +800,7 @@ function CityView() {
   const handleAddCTO = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/ctos', {
+      const res = await authFetch('/api/ctos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -795,7 +832,7 @@ function CityView() {
     e.preventDefault();
     if (!editingCTO) return;
     try {
-      await fetch(`/api/ctos/${editingCTO.id}`, {
+      await authFetch(`/api/ctos/${editingCTO.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editForm),
@@ -869,7 +906,7 @@ function CityView() {
               </div>
               <div className="flex justify-end gap-3 mt-6">
                 <Button type="button" variant="secondary" onClick={() => setIsEditingCity(false)}>Cancelar</Button>
-                <Button type="submit">Salvar Alterações</Button>
+                <Button type="submit">Salvar AlteraÃ§Ãµes</Button>
               </div>
             </form>
           </Card>
@@ -901,7 +938,7 @@ function CityView() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Endereço / Localização</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">EndereÃ§o / LocalizaÃ§Ã£o</label>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -910,13 +947,13 @@ function CityView() {
                   value={newCTOAddress}
                   onChange={(e) => setNewCTOAddress(e.target.value)}
                 />
-                <Button type="button" variant="secondary" onClick={handleGetLocation} title="Obter minha localização atual">
+                <Button type="button" variant="secondary" onClick={handleGetLocation} title="Obter minha localizaÃ§Ã£o atual">
                   <MapPin className="w-4 h-4" />
                 </Button>
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Número de Portas</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">NÃºmero de Portas</label>
               <select
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                 value={newCTOPorts}
@@ -941,7 +978,7 @@ function CityView() {
             <div className="text-center py-12 bg-slate-50 rounded-xl border border-dashed border-slate-300">
               <Server className="w-12 h-12 text-slate-400 mx-auto mb-3" />
               <h3 className="text-lg font-medium text-slate-900">Nenhuma CTO cadastrada</h3>
-              <p className="text-slate-500">Adicione uma CTO para começar a documentar.</p>
+              <p className="text-slate-500">Adicione uma CTO para comeÃ§ar a documentar.</p>
             </div>
           ) : (
             <>
@@ -989,7 +1026,7 @@ function CityView() {
 
                       <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center">
                         <div className="text-xs font-medium text-slate-500">
-                          Ocupação: {Math.round(((cto.used_ports || 0) / cto.total_ports) * 100)}%
+                          OcupaÃ§Ã£o: {Math.round(((cto.used_ports || 0) / cto.total_ports) * 100)}%
                         </div>
                         <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                           <div 
@@ -1007,7 +1044,7 @@ function CityView() {
             {pagination.pages > 1 && (
               <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-200 pt-6">
                 <p className="text-sm text-slate-500">
-                  Mostrando <span className="font-medium">{((pagination.page - 1) * pagination.limit) + 1}</span> até <span className="font-medium">{Math.min(pagination.page * pagination.limit, pagination.total)}</span> de <span className="font-medium">{pagination.total}</span> CTOs
+                  Mostrando <span className="font-medium">{((pagination.page - 1) * pagination.limit) + 1}</span> atÃ© <span className="font-medium">{Math.min(pagination.page * pagination.limit, pagination.total)}</span> de <span className="font-medium">{pagination.total}</span> CTOs
                 </p>
                 <div className="flex gap-2">
                   <Button 
@@ -1018,14 +1055,14 @@ function CityView() {
                     Anterior
                   </Button>
                   <div className="flex items-center px-4 bg-slate-50 rounded-lg border border-slate-200 text-sm font-medium text-slate-700">
-                    Página {pagination.page} de {pagination.pages}
+                    PÃ¡gina {pagination.page} de {pagination.pages}
                   </div>
                   <Button 
                     variant="secondary" 
                     onClick={() => fetchCTOs(pagination.page + 1)}
                     disabled={pagination.page === pagination.pages}
                   >
-                    Próxima
+                    PrÃ³xima
                   </Button>
                 </div>
               </div>
@@ -1035,14 +1072,14 @@ function CityView() {
         </>
       )}
 
-      {/* Modal de Edição de CTO */}
+      {/* Modal de EdiÃ§Ã£o de CTO */}
       {editingCTO && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl">
             <div className="flex justify-between items-start mb-4">
               <div>
                 <h2 className="text-xl font-bold">Editar CTO</h2>
-                <p className="text-slate-500 text-sm">Altere as informações da CTO</p>
+                <p className="text-slate-500 text-sm">Altere as informaÃ§Ãµes da CTO</p>
               </div>
               <button onClick={() => setEditingCTO(null)} className="text-slate-400 hover:text-slate-600">
                 <XCircle className="w-6 h-6" />
@@ -1061,7 +1098,7 @@ function CityView() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Endereço / Localização</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">EndereÃ§o / LocalizaÃ§Ã£o</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -1075,18 +1112,18 @@ function CityView() {
                     onClick={() => {
                       navigator.geolocation?.getCurrentPosition(
                         (pos) => setEditForm(prev => ({ ...prev, address: `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}` })),
-                        () => alert('Não foi possível obter a localização.')
+                        () => alert('NÃ£o foi possÃ­vel obter a localizaÃ§Ã£o.')
                       );
                     }}
                     className="px-3 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-600"
-                    title="Usar minha localização"
+                    title="Usar minha localizaÃ§Ã£o"
                   >
                     <MapPin className="w-4 h-4" />
                   </button>
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Número de Portas</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">NÃºmero de Portas</label>
                 <select
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                   value={editForm.total_ports}
@@ -1099,7 +1136,7 @@ function CityView() {
               </div>
               <div className="flex gap-3 mt-6 pt-4 border-t border-slate-100 justify-end">
                 <Button type="button" variant="secondary" onClick={() => setEditingCTO(null)}>Cancelar</Button>
-                <Button type="submit">Salvar Alterações</Button>
+                <Button type="submit">Salvar AlteraÃ§Ãµes</Button>
               </div>
             </form>
           </div>
@@ -1127,7 +1164,7 @@ function CTODetail() {
 
   const fetchCTODetails = async () => {
     try {
-      const res = await fetch(`/api/ctos/${id}`);
+      const res = await authFetch(`/api/ctos/${id}`);
       if (!res.ok) throw new Error('CTO not found');
       const data = await res.json();
       setCto(data);
@@ -1158,14 +1195,14 @@ function CTODetail() {
     try {
       if (existingClient) {
         // Update
-        await fetch(`/api/clients/${existingClient.id}`, {
+        await authFetch(`/api/clients/${existingClient.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(clientForm),
         });
       } else {
         // Create
-        await fetch('/api/clients', {
+        await authFetch('/api/clients', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1188,7 +1225,7 @@ function CTODetail() {
     if (!confirm('Tem certeza que deseja remover este cliente?')) return;
 
     try {
-      await fetch(`/api/clients/${existingClient.id}`, { method: 'DELETE' });
+      await authFetch(`/api/clients/${existingClient.id}`, { method: 'DELETE' });
       setSelectedPort(null);
       fetchCTODetails();
     } catch (error) {
@@ -1232,7 +1269,7 @@ function CTODetail() {
             </div>
             <div className="ml-3">
               <p className="text-sm text-red-700">
-                <span className="font-bold">Atenção:</span> Esta CTO atingiu sua capacidade máxima ({cto.total_ports} portas ocupadas). Não é possível adicionar novos clientes.
+                <span className="font-bold">AtenÃ§Ã£o:</span> Esta CTO atingiu sua capacidade mÃ¡xima ({cto.total_ports} portas ocupadas). NÃ£o Ã© possÃ­vel adicionar novos clientes.
               </p>
             </div>
           </div>
@@ -1332,9 +1369,9 @@ function CTODetail() {
                   <th className="px-6 py-3">Porta</th>
                   <th className="px-6 py-3">Nome</th>
                   <th className="px-6 py-3">PPPoE</th>
-                  <th className="px-6 py-3">Endereço</th>
+                  <th className="px-6 py-3">EndereÃ§o</th>
                   <th className="px-6 py-3">Status</th>
-                  <th className="px-6 py-3">Ações</th>
+                  <th className="px-6 py-3">AÃ§Ãµes</th>
                 </tr>
               </thead>
               <tbody>
@@ -1396,7 +1433,7 @@ function CTODetail() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Usuário PPPoE</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">UsuÃ¡rio PPPoE</label>
                 <input
                   type="text"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
@@ -1406,11 +1443,11 @@ function CTODetail() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Endereço</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">EndereÃ§o</label>
                 <input
                   type="text"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="Endereço da instalação"
+                  placeholder="EndereÃ§o da instalaÃ§Ã£o"
                   value={clientForm.address}
                   onChange={(e) => setClientForm({ ...clientForm, address: e.target.value })}
                 />
@@ -1471,27 +1508,27 @@ function ViabilityCheck() {
       } else {
         // Try geocoding
         try {
-          const geoRes = await fetch(`/api/geocode?q=${encodeURIComponent(address)}`);
+          const geoRes = await authFetch(`/api/geocode?q=${encodeURIComponent(address)}`);
           if (geoRes.ok) {
             const geoData = await geoRes.json();
             lat = geoData.lat;
             lng = geoData.lng;
             // Optional: setAddress(geoData.display_name); // Don't overwrite yet to avoid confusion
           } else {
-            alert("Endereço não localizado. Tente usar coordenadas (lat, lng).");
+            alert("EndereÃ§o nÃ£o localizado. Tente usar coordenadas (lat, lng).");
             setLoading(false);
             return;
           }
         } catch (err) {
           console.error("Geocoding failed", err);
-          alert("Erro ao buscar endereço. Tente novamente.");
+          alert("Erro ao buscar endereÃ§o. Tente novamente.");
           setLoading(false);
           return;
         }
       }
 
       if (lat !== null && lng !== null) {
-        const res = await fetch(`/api/viability?lat=${lat}&lng=${lng}&radius=${radius}`);
+        const res = await authFetch(`/api/viability?lat=${lat}&lng=${lng}&radius=${radius}`);
         const data = await res.json();
         if (Array.isArray(data)) {
           setResults(data);
@@ -1506,7 +1543,7 @@ function ViabilityCheck() {
 
   const handleGetCurrentLocation = () => {
     if (!navigator.geolocation) {
-      alert("Geolocalização não é suportada.");
+      alert("GeolocalizaÃ§Ã£o nÃ£o Ã© suportada.");
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -1514,7 +1551,7 @@ function ViabilityCheck() {
         setAddress(`${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`);
       },
       (err) => {
-        alert("Erro ao obter localização: " + err.message);
+        alert("Erro ao obter localizaÃ§Ã£o: " + err.message);
       }
     );
   };
@@ -1523,14 +1560,14 @@ function ViabilityCheck() {
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Consulta de Viabilidade</h1>
-        <p className="text-slate-500">Encontre as CTOs mais próximas com portas disponíveis.</p>
+        <p className="text-slate-500">Encontre as CTOs mais prÃ³ximas com portas disponÃ­veis.</p>
       </div>
 
       <Card className="p-6">
         <form onSubmit={handleSearch} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Endereço ou Coordenadas (Lat, Lng)</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">EndereÃ§o ou Coordenadas (Lat, Lng)</label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -1544,7 +1581,7 @@ function ViabilityCheck() {
                     onChange={(e) => setAddress(e.target.value)}
                   />
                 </div>
-                <Button type="button" variant="secondary" onClick={handleGetCurrentLocation} title="Usar localização atual">
+                <Button type="button" variant="secondary" onClick={handleGetCurrentLocation} title="Usar localizaÃ§Ã£o atual">
                   <Locate className="w-4 h-4" />
                 </Button>
               </div>
@@ -1585,11 +1622,11 @@ function ViabilityCheck() {
           </h3>
 
           {loading ? (
-            <div className="text-center py-12 text-slate-500">Buscando CTOs próximas...</div>
+            <div className="text-center py-12 text-slate-500">Buscando CTOs prÃ³ximas...</div>
           ) : results.length === 0 ? (
             <Card className="p-12 text-center text-slate-500 bg-slate-50 border-dashed">
               <AlertTriangle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p>Nenhuma CTO encontrada neste raio com portas disponíveis.</p>
+              <p>Nenhuma CTO encontrada neste raio com portas disponÃ­veis.</p>
               <p className="text-sm mt-1">Tente aumentar o raio de busca.</p>
             </Card>
           ) : (
@@ -1624,7 +1661,7 @@ function ViabilityCheck() {
                         </div>
                         {!isFull && (
                           <Link to={`/cto/${cto.id}`}>
-                            <Button variant="ghost" className="text-indigo-600 hover:text-indigo-700 p-0 h-auto font-bold text-xs uppercase flex items-center gap-1">
+                  <Button variant="ghost" className="text-indigo-600 hover:text-indigo-700 p-0 h-auto font-bold text-xs uppercase flex items-center gap-1">
                               Gerenciar <ArrowLeft className="w-3 h-3 rotate-180" />
                             </Button>
                           </Link>
@@ -1642,19 +1679,35 @@ function ViabilityCheck() {
   );
 }
 
-// --- Layout & App ---
+function App() {
+  return (
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/*" element={
+          <ProtectedRoute>
+            <DashboardLayout />
+          </ProtectedRoute>
+        } />
+      </Routes>
+    </AuthProvider>
+  );
+}
 
-function Layout() {
+function DashboardLayout() {
+  const { user, logout } = useAuth();
+  const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<(any & { type: 'client' | 'cto'; cto_name: string; city_name: string })[]>([]);
   const [showResults, setShowResults] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(async () => {
       if (searchQuery.length >= 2) {
         try {
-          const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}`);
+          const res = await authFetch(`/api/search?q=${encodeURIComponent(searchQuery)}`);
           const data = await res.json();
           setSearchResults(data);
           setShowResults(true);
@@ -1670,121 +1723,155 @@ function Layout() {
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery]);
 
+  const menuItems = [
+    { id: 'infrastructure', label: 'Infraestrutura', icon: Server, path: '/' },
+    { id: 'viability', label: 'Consulta Viabilidade', icon: Map, path: '/viability' },
+    { id: 'users', label: 'Gerenciar Usuários', icon: Users, path: '/users', roles: ['admin'] },
+  ];
+
+  const allowedItems = menuItems.filter(item => !item.roles || item.roles.includes(user?.role || ''));
+
   return (
-    <div className="min-h-screen bg-slate-50 font-sans" onClick={() => setShowResults(false)}>
-      <nav className="bg-white border-b border-slate-200 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-0 h-auto md:h-16 py-3 md:py-0">
-            <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-8 w-full md:w-auto flex-1">
-              <div className="flex items-center justify-between w-full md:w-auto">
-                <Link to="/" className="flex items-center gap-2 shrink-0">
-                  <div className="bg-indigo-600 p-1.5 rounded-lg">
-                    <Server className="w-5 h-5 text-white" />
-                  </div>
-                  <span className="text-lg font-bold text-slate-900 tracking-tight">Gestão CTO</span>
-                </Link>
-                <div className="hidden md:ml-6 md:flex md:space-x-4">
-                  <Link to="/" className="text-sm font-medium text-slate-600 hover:text-indigo-600 px-3 py-2 rounded-md transition-colors">Infraestrutura</Link>
-                  <Link to="/viability" className="text-sm font-medium text-slate-600 hover:text-indigo-600 px-3 py-2 rounded-md transition-colors flex items-center gap-1">
-                    <Map className="w-4 h-4" />
-                    Viabilidade
-                  </Link>
-                </div>
-                <div className="flex md:hidden items-center gap-2 text-xs font-medium text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
-                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                  Online
-                </div>
-              </div>
-              
-              {/* Search Bar */}
-              <div className="relative w-full md:w-96" onClick={e => e.stopPropagation()}>
+    <div className="flex h-screen bg-slate-50 overflow-hidden" onClick={() => setShowResults(false)}>
+      {/* Sidebar */}
+      <aside className={cn(
+        "bg-white border-r border-slate-200 transition-all duration-300 flex flex-col z-30",
+        isSidebarOpen ? "w-72" : "w-20"
+      )}>
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="bg-indigo-600 p-1.5 rounded-lg text-white shrink-0">
+              <Server size={24} />
+            </div>
+            {isSidebarOpen && <span className="font-bold text-lg text-slate-800 truncate">Gestão CTO</span>}
+          </div>
+        </div>
+
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+          {allowedItems.map((item) => (
+            <Link
+              key={item.id}
+              to={item.path}
+              className={cn(
+                "flex items-center gap-4 px-4 py-3 rounded-xl transition-all group",
+                location.pathname === item.path
+                  ? "bg-indigo-50 text-indigo-600 font-bold"
+                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+              )}
+            >
+              <item.icon size={20} className={cn(
+                "shrink-0",
+                location.pathname === item.path ? "text-indigo-600" : "text-slate-400 group-hover:text-slate-600"
+              )} />
+              {isSidebarOpen && <span className="truncate">{item.label}</span>}
+            </Link>
+          ))}
+        </nav>
+
+        <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+          <div className="flex items-center gap-3 p-3 rounded-xl">
+             <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold shrink-0">
+               {user?.name?.charAt(0) || user?.email?.charAt(0).toUpperCase()}
+             </div>
+             {isSidebarOpen && (
+               <div className="flex-1 min-w-0">
+                 <p className="text-sm font-bold text-slate-900 truncate">{user?.name || 'Usuário'}</p>
+                 <p className="text-xs text-slate-500 truncate capitalize">{user?.role === 'admin' ? 'Gestor' : user?.role === 'tech' ? 'Técnico' : 'Vendedor'}</p>
+               </div>
+             )}
+          </div>
+          <button
+            onClick={logout}
+            className={cn(
+              "w-full flex items-center gap-4 px-4 py-3 rounded-xl text-red-500 hover:bg-red-50 transition-all mt-2",
+              !isSidebarOpen && "justify-center"
+            )}
+          >
+            <XCircle size={20} />
+            {isSidebarOpen && <span className="font-medium">Sair</span>}
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 overflow-y-auto relative">
+        <header className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex items-center justify-between">
+           <div className="flex items-center gap-4 flex-1">
+             <button 
+               onClick={() => setSidebarOpen(!isSidebarOpen)}
+               className="p-2 hover:bg-slate-100 rounded-lg text-slate-500"
+             >
+               <Filter size={20} className={cn("transition-transform", !isSidebarOpen && "rotate-180")} />
+             </button>
+
+             {/* Search Bar */}
+             <div className="relative w-full max-w-md hidden md:block" onClick={e => e.stopPropagation()}>
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Search className="h-4 w-4 text-slate-400" />
                 </div>
                 <input
                   type="text"
-                  className="block w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg leading-5 bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm transition-colors"
-                  placeholder="Buscar por nome, endereço, PPPoE ou CTO..."
+                  className="block w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-1 focus:ring-indigo-500 sm:text-sm transition-colors"
+                  placeholder="Buscar clientes ou CTOs..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={() => searchQuery.length >= 2 && setShowResults(true)}
                 />
                 
-                {/* Search Results Dropdown */}
                 {showResults && searchResults.length > 0 && (
-                  <div className="absolute mt-1 w-full bg-white shadow-lg rounded-lg border border-slate-200 py-1 z-50 max-h-96 overflow-auto">
-                    <div className="px-4 py-2 text-xs font-semibold text-slate-500 bg-slate-50 border-b border-slate-100">
-                      {searchResults.length} resultados encontrados
-                    </div>
+                  <div className="absolute mt-1 w-full bg-white shadow-xl rounded-lg border border-slate-200 py-1 z-50 max-h-96 overflow-auto">
                     {searchResults.map((result) => (
                       <button
                         key={`${result.type}-${result.id}`}
                         className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100 last:border-0 transition-colors"
                         onClick={() => {
-                          navigate(`/cto/${result.cto_id}`);
+                          navigate(`/cto/${result.cto_id || result.id}`);
                           setShowResults(false);
                           setSearchQuery('');
                         }}
                       >
                         <div className="flex justify-between items-start">
                           <div className="flex items-center gap-2">
-                            {result.type === 'cto' ? (
-                              <Server className="w-4 h-4 text-indigo-500" />
-                            ) : (
-                              <Users className="w-4 h-4 text-slate-400" />
-                            )}
+                            {result.type === 'cto' ? <Server className="w-4 h-4 text-indigo-500" /> : <Users className="w-4 h-4 text-slate-400" />}
                             <span className="font-medium text-slate-900">{result.name}</span>
                           </div>
-                          <div className="flex items-center gap-2">
-                             <span className={cn(
-                               "text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider",
-                               result.type === 'cto' ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-600"
-                             )}>
-                               {result.type === 'cto' ? 'CTO' : 'Cliente'}
-                             </span>
-                             {result.type === 'client' && <Badge status={result.status} />}
-                          </div>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase bg-slate-100 text-slate-600">
+                            {result.type === 'cto' ? 'CTO' : 'Cliente'}
+                          </span>
                         </div>
-                        <div className="text-xs text-slate-500 mt-1">
-                          {result.city_name} {result.type === 'client' && `• ${result.cto_name}`} {result.port_number > 0 && `• Porta ${result.port_number}`}
-                        </div>
-                        {result.pppoe && (
-                          <div className="text-xs text-indigo-600 mt-0.5 font-mono">
-                            PPPoE: {result.pppoe}
-                          </div>
-                        )}
-                        <div className="text-xs text-slate-400 mt-0.5 truncate">
-                          {result.address}
+                        <div className="text-[10px] text-slate-500 mt-0.5">
+                          {result.city_name} • {result.address}
                         </div>
                       </button>
                     ))}
                   </div>
                 )}
-                {showResults && searchQuery.length >= 2 && searchResults.length === 0 && (
-                  <div className="absolute mt-1 w-full bg-white shadow-lg rounded-lg border border-slate-200 py-4 px-4 text-center text-sm text-slate-500 z-50">
-                    Nenhum resultado encontrado.
-                  </div>
-                )}
-              </div>
-            </div>
+             </div>
+           </div>
+           
+           <div className="flex items-center gap-4">
+             <div className="text-right hidden sm:block">
+               <div className="flex items-center gap-1.5 justify-end">
+                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                 <span className="text-sm font-bold text-slate-700">Online</span>
+               </div>
+             </div>
+           </div>
+        </header>
 
-            <div className="flex items-center gap-4">
-              <div className="hidden md:flex items-center gap-2 text-sm text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                Sistema Online
-              </div>
-            </div>
-          </div>
+        <div className="p-8">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/viability" element={<ViabilityCheck />} />
+            <Route path="/city/:id" element={<CityView />} />
+            <Route path="/cto/:id" element={<CTODetail />} />
+            <Route path="/users" element={
+              <ProtectedRoute roles={['admin']}>
+                <UsersPage />
+              </ProtectedRoute>
+            } />
+          </Routes>
         </div>
-      </nav>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/viability" element={<ViabilityCheck />} />
-          <Route path="/city/:id" element={<CityView />} />
-          <Route path="/cto/:id" element={<CTODetail />} />
-        </Routes>
       </main>
     </div>
   );

@@ -66,6 +66,14 @@ export const initializeDb = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(cto_id, port_number)
       );
+
+      CREATE TABLE IF NOT EXISTS users (
+        uid TEXT PRIMARY KEY,
+        email TEXT NOT NULL UNIQUE,
+        role TEXT NOT NULL CHECK (role IN ('admin', 'tech', 'sales')) DEFAULT 'sales',
+        name TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
     `);
     
     // Migrations logic

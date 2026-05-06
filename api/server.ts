@@ -4,9 +4,29 @@ import pool, { initializeDb } from "./db.js";
 
 
 import cors from "cors";
+import admin from "firebase-admin";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Initialize DB
+initializeDb().catch(console.error);
+
+// Initialize Firebase Admin
+if (process.env.FIREBASE_PROJECT_ID) {
+  try {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      }),
+    });
+    console.log("Firebase Admin initialized successfully");
+  } catch (error) {
+    console.error("Firebase Admin initialization error:", error);
+  }
+}
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -42,41 +62,126 @@ async function getGoogleDistances(origin: {lat: number, lng: number}, destinatio
   }
 }
 
-// Initialize DB
-initializeDb().catch(console.error);
+// Middleware de Autenticação
+const authenticate = async (req: any, res: any, next: any) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Não autorizado. Token não fornecido.' });
+  }
+
+  const idToken = authHeader.split('Bearer ')[1];
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    req.user = decodedToken;
+    
+    // Buscar perfil do usuário no banco de dados
+    const userResult = await pool.query("SELECT * FROM users WHERE uid = $1", [decodedToken.uid]);
+    if (userResult.rowCount > 0) {
+      req.userRole = userResult.rows[0].role;
+      req.userData = userResult.rows[0];
+    } else {
+      // Se não existe no banco, mas tem token válido, talvez seja o primeiro login
+      req.userRole = 'sales'; // Default
+    }
+    
+    next();
+  } catch (error) {
+    console.error('Erro ao verificar token:', error);
+    res.status(401).json({ error: 'Token inválido ou expirado.' });
+  }
+};
+
+// Middleware para restringir acesso por cargo
+const authorize = (roles: string[]) => {
+  return (req: any, res: any, next: any) => {
+    if (!req.userRole || !roles.includes(req.userRole)) {
+      return res.status(403).json({ error: 'Acesso negado. Permissão insuficiente.' });
+    }
+    next();
+  };
+};
 
 // API Routes
 
-// Units
-app.get("/api/units", async (req, res) => {
+// Auth & Sync
+app.get("/api/auth/me", authenticate, async (req: any, res) => {
+  res.json({
+    uid: req.user.uid,
+    email: req.user.email,
+    role: req.userRole || 'sales',
+    name: req.userData?.name || req.user.name || ''
+  });
+});
+
+app.post("/api/auth/sync", async (req, res) => {
+  const { idToken, name } = req.body;
+  if (!idToken) return res.status(400).json({ error: "Token é obrigatório" });
+
   try {
-    const result = await pool.query("SELECT * FROM units ORDER BY name");
-    res.json(result.rows);
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const { uid, email } = decodedToken;
+
+    // Verificar se já existe
+    const existing = await pool.query("SELECT * FROM users WHERE uid = $1", [uid]);
+    
+    if (existing.rowCount === 0) {
+      // Verificar se é o primeiro usuário do sistema (se for, vira admin)
+      const countRes = await pool.query("SELECT COUNT(*) FROM users");
+      const isFirst = parseInt(countRes.rows[0].count) === 0;
+      const role = isFirst ? 'admin' : 'sales';
+
+      await pool.query(
+        "INSERT INTO users (uid, email, role, name) VALUES ($1, $2, $3, $4)",
+        [uid, email, role, name || '']
+      );
+      res.json({ uid, email, role, name, isNew: true });
+    } else {
+      res.json({ ...existing.rows[0], isNew: false });
+    }
   } catch (error: any) {
-    console.error("Error fetching units:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
-app.post("/api/units", async (req, res) => {
-  const { name } = req.body;
+// User Management (Admin only)
+app.get("/api/users", authenticate, authorize(['admin']), async (req, res) => {
   try {
+    const result = await pool.query("SELECT * FROM users ORDER BY created_at DESC");
+    res.json(result.rows);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/users", authenticate, authorize(['admin']), async (req, res) => {
+  const { email, password, name, role } = req.body;
+  
+  try {
+    // 1. Criar no Firebase
+    const userRecord = await admin.auth().createUser({
+      email,
+      password,
+      displayName: name,
+    });
+
+    // 2. Salvar no Banco Local
     const result = await pool.query(
-      "INSERT INTO units (name) VALUES ($1) RETURNING id, name",
-      [name]
+      "INSERT INTO users (uid, email, role, name) VALUES ($1, $2, $3, $4) RETURNING *",
+      [userRecord.uid, email, role || 'sales', name]
     );
+
     res.json(result.rows[0]);
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }
 });
 
-app.put("/api/units/:id", async (req, res) => {
-  const { name } = req.body;
+app.put("/api/users/:uid", authenticate, authorize(['admin']), async (req, res) => {
+  const { role, name } = req.body;
   try {
     await pool.query(
-      "UPDATE units SET name = $1 WHERE id = $2",
-      [name, req.params.id]
+      "UPDATE users SET role = $1, name = $2 WHERE uid = $3",
+      [role, name, req.params.uid]
     );
     res.json({ success: true });
   } catch (error: any) {
@@ -84,9 +189,12 @@ app.put("/api/units/:id", async (req, res) => {
   }
 });
 
-app.delete("/api/units/:id", async (req, res) => {
+app.delete("/api/users/:uid", authenticate, authorize(['admin']), async (req, res) => {
   try {
-    await pool.query("DELETE FROM units WHERE id = $1", [req.params.id]);
+    // 1. Deletar no Firebase
+    await admin.auth().deleteUser(req.params.uid);
+    // 2. Deletar no Banco
+    await pool.query("DELETE FROM users WHERE uid = $1", [req.params.uid]);
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -94,7 +202,7 @@ app.delete("/api/units/:id", async (req, res) => {
 });
 
 // Cities
-app.get("/api/cities", async (req, res) => {
+app.get("/api/cities", authenticate, async (req, res) => {
   const { unit_id } = req.query;
   try {
     let query = "SELECT * FROM cities";
@@ -115,7 +223,7 @@ app.get("/api/cities", async (req, res) => {
   }
 });
 
-app.post("/api/cities", async (req, res) => {
+app.post("/api/cities", authenticate, authorize(['admin']), async (req, res) => {
   const { name, unit_id } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: "Nome da cidade é obrigatório" });
   
@@ -133,7 +241,7 @@ app.post("/api/cities", async (req, res) => {
   }
 });
 
-app.put("/api/cities/:id", async (req, res) => {
+app.put("/api/cities/:id", authenticate, authorize(['admin']), async (req, res) => {
   const { name, unit_id } = req.body;
   try {
     await pool.query(
@@ -147,7 +255,7 @@ app.put("/api/cities/:id", async (req, res) => {
 });
 
 // CTOs
-app.get("/api/cities/:cityId/ctos", async (req, res) => {
+app.get("/api/cities/:cityId/ctos", authenticate, async (req, res) => {
   try {
     const cityId = req.params.cityId;
     const page = parseInt(req.query.page as string) || 1;
@@ -192,7 +300,7 @@ app.get("/api/cities/:cityId/ctos", async (req, res) => {
   }
 });
 
-app.post("/api/ctos", async (req, res) => {
+app.post("/api/ctos", authenticate, authorize(['admin']), async (req, res) => {
   const { name, city_id, total_ports, address, latitude, longitude } = req.body;
   try {
     const result = await pool.query(
@@ -205,7 +313,7 @@ app.post("/api/ctos", async (req, res) => {
   }
 });
 
-app.get("/api/ctos/:id", async (req, res) => {
+app.get("/api/ctos/:id", authenticate, async (req, res) => {
   try {
     const ctoResult = await pool.query("SELECT * FROM ctos WHERE id = $1", [req.params.id]);
     const cto = ctoResult.rows[0];
@@ -220,7 +328,7 @@ app.get("/api/ctos/:id", async (req, res) => {
   }
 });
 
-app.put("/api/ctos/:id", async (req, res) => {
+app.put("/api/ctos/:id", authenticate, authorize(['admin']), async (req, res) => {
   const { name, address, total_ports, latitude, longitude } = req.body;
   try {
     await pool.query(
@@ -233,7 +341,7 @@ app.put("/api/ctos/:id", async (req, res) => {
   }
 });
 
-app.delete("/api/ctos/:id", async (req, res) => {
+app.delete("/api/ctos/:id", authenticate, authorize(['admin']), async (req, res) => {
   try {
     await pool.query("DELETE FROM ctos WHERE id = $1", [req.params.id]);
     res.json({ success: true });
@@ -243,7 +351,7 @@ app.delete("/api/ctos/:id", async (req, res) => {
 });
 
 // Clients
-app.post("/api/clients", async (req, res) => {
+app.post("/api/clients", authenticate, authorize(['admin', 'tech']), async (req, res) => {
   const { name, address, pppoe, city_id, cto_id, port_number, status } = req.body;
   try {
     const result = await pool.query(
@@ -256,7 +364,7 @@ app.post("/api/clients", async (req, res) => {
   }
 });
 
-app.put("/api/clients/:id", async (req, res) => {
+app.put("/api/clients/:id", authenticate, authorize(['admin']), async (req, res) => {
   const { name, address, pppoe, status } = req.body;
   try {
     await pool.query(
@@ -269,7 +377,7 @@ app.put("/api/clients/:id", async (req, res) => {
   }
 });
 
-app.delete("/api/clients/:id", async (req, res) => {
+app.delete("/api/clients/:id", authenticate, authorize(['admin']), async (req, res) => {
   try {
     await pool.query("DELETE FROM clients WHERE id = $1", [req.params.id]);
     res.json({ success: true });
@@ -279,7 +387,7 @@ app.delete("/api/clients/:id", async (req, res) => {
 });
 
 // Bulk Import
-app.post("/api/import", async (req, res) => {
+app.post("/api/import", authenticate, authorize(['admin']), async (req, res) => {
   const { rows } = req.body; 
   if (!rows || !Array.isArray(rows)) return res.status(400).json({ error: "Invalid data" });
 
@@ -396,7 +504,7 @@ app.post("/api/import", async (req, res) => {
 });
 
 // Viability Check
-app.get("/api/viability", async (req, res) => {
+app.get("/api/viability", authenticate, async (req, res) => {
   const { lat, lng, radius } = req.query;
   
   if (!lat || !lng) {
@@ -471,7 +579,7 @@ app.get("/api/viability", async (req, res) => {
 });
 
 // Geocoding
-app.get("/api/geocode", async (req, res) => {
+app.get("/api/geocode", authenticate, async (req, res) => {
   const { q } = req.query;
   if (!q) return res.status(400).json({ error: "Endereço é obrigatório" });
 
@@ -499,7 +607,7 @@ app.get("/api/geocode", async (req, res) => {
 });
 
 // Search
-app.get("/api/search", async (req, res) => {
+app.get("/api/search", authenticate, async (req, res) => {
   try {
     const q = req.query.q as string;
     if (!q || q.length < 2) return res.json([]);
