@@ -13,24 +13,61 @@ const PORT = process.env.PORT || 3000;
 initializeDb().catch(console.error);
 
 // Initialize Firebase Admin
-if (process.env.FIREBASE_PROJECT_ID) {
+const initFirebaseAdmin = () => {
+  // Avoid re-initializing in serverless warm starts
+  if (admin.apps.length > 0) {
+    return admin.apps[0]!;
+  }
+
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const rawKey = process.env.FIREBASE_PRIVATE_KEY;
+
+  console.log('[Firebase Admin] projectId:', projectId ? 'SET' : 'MISSING');
+  console.log('[Firebase Admin] clientEmail:', clientEmail ? 'SET' : 'MISSING');
+  console.log('[Firebase Admin] privateKey:', rawKey ? `SET (length: ${rawKey.length})` : 'MISSING');
+
+  if (!projectId || !clientEmail || !rawKey) {
+    console.error('[Firebase Admin] Missing credentials, cannot initialize.');
+    return null;
+  }
+
+  let privateKey = rawKey;
+  if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+    privateKey = privateKey.slice(1, -1);
+  }
+  privateKey = privateKey.replace(/\\n/g, '\n');
+
   try {
-    admin.initializeApp({
+    const app = admin.initializeApp({
       credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        projectId,
+        clientEmail,
+        privateKey,
       }),
     });
-    console.log("Firebase Admin initialized successfully");
+    console.log('[Firebase Admin] Initialized successfully.');
+    return app;
   } catch (error) {
-    console.error("Firebase Admin initialization error:", error);
+    console.error('[Firebase Admin] Initialization error:', error);
+    return null;
   }
-}
+};
+
+initFirebaseAdmin();
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+app.get('/api/test-db', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT NOW()');
+    res.json({ status: 'ok', now: result.rows[0].now });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message, code: error.code });
+  }
+});
 
 async function getGoogleDistances(origin: {lat: number, lng: number}, destinations: {lat: number, lng: number}[]) {
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
@@ -76,7 +113,7 @@ const authenticate = async (req: any, res: any, next: any) => {
     
     // Buscar perfil do usuário no banco de dados
     const userResult = await pool.query("SELECT * FROM users WHERE uid = $1", [decodedToken.uid]);
-    if (userResult.rowCount > 0) {
+    if (userResult.rows.length > 0) {
       req.userRole = userResult.rows[0].role;
       req.userData = userResult.rows[0];
     } else {
@@ -117,14 +154,28 @@ app.post("/api/auth/sync", async (req, res) => {
   const { idToken, name } = req.body;
   if (!idToken) return res.status(400).json({ error: "Token é obrigatório" });
 
+  console.log('[auth/sync] Received request, firebase apps count:', admin.apps.length);
+
   try {
+    // Re-initialize if needed (serverless cold start edge case)
+    if (admin.apps.length === 0) {
+      initFirebaseAdmin();
+    }
+
+    if (admin.apps.length === 0) {
+      console.error('[auth/sync] Firebase Admin not initialized.');
+      return res.status(500).json({ error: 'Firebase Admin SDK não inicializado. Verifique as variáveis de ambiente.' });
+    }
+
+    console.log('[auth/sync] Verifying token...');
     const decodedToken = await admin.auth().verifyIdToken(idToken);
     const { uid, email } = decodedToken;
+    console.log('[auth/sync] Token verified for uid:', uid);
 
     // Verificar se já existe
     const existing = await pool.query("SELECT * FROM users WHERE uid = $1", [uid]);
     
-    if (existing.rowCount === 0) {
+    if (existing.rows.length === 0) {
       // Verificar se é o primeiro usuário do sistema (se for, vira admin)
       const countRes = await pool.query("SELECT COUNT(*) FROM users");
       const isFirst = parseInt(countRes.rows[0].count) === 0;
@@ -134,12 +185,15 @@ app.post("/api/auth/sync", async (req, res) => {
         "INSERT INTO users (uid, email, role, name) VALUES ($1, $2, $3, $4)",
         [uid, email, role, name || '']
       );
-      res.json({ uid, email, role, name, isNew: true });
+      console.log('[auth/sync] New user created with role:', role);
+      res.json({ uid, email, role, name: name || '', isNew: true });
     } else {
+      console.log('[auth/sync] Existing user found:', existing.rows[0].role);
       res.json({ ...existing.rows[0], isNew: false });
     }
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    console.error('[auth/sync] Error:', error.message, error.code);
+    res.status(500).json({ error: error.message, code: error.code });
   }
 });
 
@@ -199,6 +253,58 @@ app.delete("/api/users/:uid", authenticate, authorize(['admin']), async (req, re
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
+});
+
+// Units
+app.get("/api/units", authenticate, async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM units ORDER BY name");
+    res.json(result.rows);
+  } catch (error: any) {
+    console.error("Error fetching units:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/units", authenticate, authorize(['admin']), async (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: "Nome da unidade é obrigatório" });
+  
+  try {
+    const result = await pool.query(
+      "INSERT INTO units (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING *",
+      [name.trim().toUpperCase()]
+    );
+    res.json(result.rows[0]);
+  } catch (error: any) {
+    console.error("Error creating unit:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put("/api/units/:id", authenticate, authorize(['admin']), async (req, res) => {
+  const { name } = req.body;
+  try {
+    await pool.query("UPDATE units SET name = $1 WHERE id = $2", [name.trim().toUpperCase(), req.params.id]);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.delete("/api/units/:id", authenticate, authorize(['admin']), async (req, res) => {
+  try {
+    await pool.query("DELETE FROM units WHERE id = $1", [req.params.id]);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/db-info", async (req, res) => {
+  const url = process.env.DATABASE_URL || '';
+  const host = url.split('@')[1]?.split('/')[0] || 'unknown';
+  res.json({ host });
 });
 
 // Cities
@@ -264,7 +370,7 @@ app.get("/api/cities/:cityId/ctos", authenticate, async (req, res) => {
 
     // Get total count for pagination
     const countResult = await pool.query(
-      "SELECT COUNT(*) FROM ctos WHERE city_id = $1",
+      "SELECT COUNT(*) FROM ctos WHERE city_id = $1 AND name NOT LIKE '%BAKANASNET%'",
       [cityId]
     );
     const totalCount = parseInt(countResult.rows[0].count);
@@ -280,7 +386,7 @@ app.get("/api/cities/:cityId/ctos", authenticate, async (req, res) => {
         WHERE status = 'active'
         GROUP BY cto_id
       ) stats ON c.id = stats.cto_id
-      WHERE c.city_id = $1
+      WHERE c.city_id = $1 AND c.name NOT LIKE '%BAKANASNET%'
       ORDER BY c.name
       LIMIT $2 OFFSET $3
     `, [cityId, limit, offset]);
@@ -315,10 +421,10 @@ app.post("/api/ctos", authenticate, authorize(['admin']), async (req, res) => {
 
 app.get("/api/ctos/:id", authenticate, async (req, res) => {
   try {
-    const ctoResult = await pool.query("SELECT * FROM ctos WHERE id = $1", [req.params.id]);
+    const ctoResult = await pool.query("SELECT * FROM ctos WHERE id = $1 AND name NOT LIKE '%BAKANASNET%'", [req.params.id]);
     const cto = ctoResult.rows[0];
     
-    if (!cto) return res.status(404).json({ error: "CTO not found" });
+    if (!cto) return res.status(404).json({ error: "CTO not found or restricted" });
     
     const clientsResult = await pool.query("SELECT * FROM clients WHERE cto_id = $1", [req.params.id]);
     res.json({ ...cto, clients: clientsResult.rows });
@@ -538,13 +644,14 @@ app.get("/api/viability", authenticate, async (req, res) => {
         GROUP BY cto_id
       ) stats ON c.id = stats.cto_id
       WHERE c.latitude IS NOT NULL AND c.longitude IS NOT NULL
+      AND c.name NOT LIKE '%BAKANASNET%'
       AND (
         6371 * acos(
           cos(radians($1)) * cos(radians(c.latitude)) * 
           cos(radians(c.longitude) - radians($2)) + 
           sin(radians($1)) * sin(radians(c.latitude))
         )
-      ) <= $3 + $4
+      ) <= $3::float + $4::float
       ORDER BY distance_direct ASC
       LIMIT 25
     `, [latitude, longitude, radiusKm, initialBuffer]);
@@ -634,7 +741,7 @@ app.get("/api/search", authenticate, async (req, res) => {
           city.name as city_name
         FROM ctos cto
         JOIN cities city ON cto.city_id = city.id
-        WHERE cto.name ILIKE $1 OR cto.address ILIKE $1
+        WHERE (cto.name ILIKE $1 OR cto.address ILIKE $1) AND cto.name NOT LIKE '%BAKANASNET%'
       )
       LIMIT 50
     `, [pattern]);

@@ -23,6 +23,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const syncUser = async (name?: string) => {
+    setLoading(true);
     const currentUser = auth.currentUser;
     if (!currentUser) {
       setUser(null);
